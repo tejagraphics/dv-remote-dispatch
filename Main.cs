@@ -24,9 +24,12 @@ namespace DvMod.RemoteDispatch
                 if (loaded.version == modEntry.Info.Version)
                     settings = loaded;
             }
-            catch
+            catch (Exception e)
             {
+                mod.Logger.Warning($"Failed to load settings, using defaults: {e.Message}");
             }
+
+            settings.permissions.Subscribe();
 
             mod.OnGUI = OnGUI;
             mod.OnSaveGUI = OnSaveGUI;

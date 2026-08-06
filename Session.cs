@@ -11,7 +11,7 @@ namespace DvMod.RemoteDispatch
     public static class Sessions
     {
         private static readonly TimeSpan SessionTimeout = TimeSpan.FromMinutes(5);
-        private static readonly object allSesssionsLock = new object();
+        private static readonly object allSessionsLock = new object();
         private static readonly Dictionary<string, Session> allSessions = new Dictionary<string, Session>();
         private static readonly HashSet<string> AllTags = new HashSet<string>() { "cars", "jobs", "junctions", "player" };
 
@@ -34,45 +34,71 @@ namespace DvMod.RemoteDispatch
 
         public static HashSet<string> GetUsersWithActiveSessions()
         {
-            return new HashSet<string>(allSessions.Values.Select(s => s.username));
+            lock (allSessionsLock)
+            {
+                return new HashSet<string>(allSessions.Values.Select(s => s.username));
+            }
         }
 
         public static void AddTag(string tag)
         {
-            lock (allSesssionsLock)
+            List<string>? timedOutSessions = null;
+
+            lock (allSessionsLock)
             {
-                List<string> timedOutSessions = new List<string>();
                 foreach (var kvp in allSessions)
                 {
                     var sessionId = kvp.Key;
                     var session = kvp.Value;
                     if (session.timeSinceLastFetch.Elapsed > SessionTimeout)
+                    {
+                        if (timedOutSessions == null)
+                            timedOutSessions = new List<string>();
                         timedOutSessions.Add(sessionId);
+                    }
                     else
+                    {
                         session.pendingTags.Add(tag);
+                    }
                 }
-                foreach (var sessionId in timedOutSessions)
+
+                if (timedOutSessions != null)
                 {
-                    Main.DebugLog(() => $"Session {sessionId} timed out");
-                    allSessions.Remove(sessionId);
-                    OnSessionEnded?.Invoke(sessionId);
+                    foreach (var sessionId in timedOutSessions)
+                    {
+                        Main.DebugLog(() => $"Session {sessionId} timed out");
+                        allSessions.Remove(sessionId);
+                    }
                 }
+            }
+
+            // Fire events outside the lock to prevent potential deadlocks
+            if (timedOutSessions != null)
+            {
+                foreach (var sessionId in timedOutSessions)
+                    OnSessionEnded?.Invoke(sessionId);
             }
         }
 
         private static async Task<IEnumerable<string>> GetTags(string username, string sessionId)
         {
             Session session;
-            lock (allSesssionsLock)
+            bool isNewSession = false;
+
+            lock (allSessionsLock)
             {
                 if (!allSessions.TryGetValue(sessionId, out session))
                 {
                     Main.DebugLog(() => $"Starting new session {sessionId} for user {username}");
                     session = new Session(username);
                     allSessions.Add(sessionId, session);
-                    OnSessionStarted?.Invoke(username);
+                    isNewSession = true;
                 }
             }
+
+            // Fire event outside the lock to prevent potential deadlocks
+            if (isNewSession)
+                OnSessionStarted?.Invoke(username);
 
             session.timeSinceLastFetch.Restart();
 

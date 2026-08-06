@@ -13,6 +13,8 @@ namespace DvMod.RemoteDispatch
 {
     public class HttpServer : MonoBehaviour
     {
+        private const int GzipMinBytes = 128;
+
         private static GameObject? rootObject;
         private readonly HttpListener listener = new HttpListener();
 
@@ -88,16 +90,16 @@ namespace DvMod.RemoteDispatch
             switch (request.Url.Segments[1].TrimEnd('/'))
             {
             case "car":
-                HandleCarRequest(context);
+                await HandleCarRequest(context).ConfigureAwait(false);
                 break;
             case "job":
                 Render200(context, ContentTypes.Json, JobData.GetAllJobDataJson());
                 break;
             case "junction":
-                HandleJunctionRequest(context);
+                await HandleJunctionRequest(context).ConfigureAwait(false);
                 break;
             case "junctionState":
-                Render200(context, ContentTypes.Json, Junctions.GetJunctionStateJSON());
+                Render200(context, ContentTypes.Json, Junctions.GetJunctionStateJson());
                 break;
             case "player":
                 var playerJson = PlayerData.GetPlayerDataJson();
@@ -110,7 +112,7 @@ namespace DvMod.RemoteDispatch
                 RenderResource(context);
                 break;
             case "track":
-                Render200(context, ContentTypes.Json, await RailTracks.GetTrackPointJSON().ConfigureAwait(false));
+                Render200(context, ContentTypes.Json, await RailTracks.GetTrackPointJson().ConfigureAwait(false));
                 break;
             case "trainset":
                 HandleTrainsetRequest(context);
@@ -124,7 +126,7 @@ namespace DvMod.RemoteDispatch
             }
         }
 
-        private static async void HandleCarRequest(HttpListenerContext context)
+        private static async Task HandleCarRequest(HttpListenerContext context)
         {
             var segments = context.Request.Url.Segments;
             if (segments.Length == 2 && context.Request.HttpMethod == "GET")
@@ -163,7 +165,9 @@ namespace DvMod.RemoteDispatch
                     LocoControl.RunCommand(controller, context.Request.QueryString)
                 ).ConfigureAwait(false);
                 RenderEmpty(context, success ? 204 : 400);
+                return;
             }
+
             RenderEmpty(context, 404);
         }
 
@@ -185,13 +189,13 @@ namespace DvMod.RemoteDispatch
             return junctionId >= 0 && junctionId < RailTrackRegistry.Instance.OrderedJunctions.Length;
         }
 
-        private static async void HandleJunctionRequest(HttpListenerContext context)
+        private static async Task HandleJunctionRequest(HttpListenerContext context)
         {
             var url = context.Request.Url;
             switch (url.Segments.Length)
             {
             case 2:
-                Render200(context, ContentTypes.Json, Junctions.GetJunctionPointJSON());
+                Render200(context, ContentTypes.Json, Junctions.GetJunctionPointJson());
                 break;
             case 4:
                 var junctionIdString = url.Segments[2].TrimEnd('/');
@@ -220,7 +224,7 @@ namespace DvMod.RemoteDispatch
             }
         }
 
-        public static void HandleTrainsetRequest(HttpListenerContext context)
+        private static void HandleTrainsetRequest(HttpListenerContext context)
         {
             var request = context.Request;
             if (request.Url.Segments.Length < 3)
@@ -228,7 +232,14 @@ namespace DvMod.RemoteDispatch
                 RenderEmpty(context, 404);
                 return;
             }
-            var trainsetId = int.Parse(request.Url.Segments[2]);
+
+            var trainsetIdString = request.Url.Segments[2].TrimEnd('/');
+            if (!int.TryParse(trainsetIdString, out var trainsetId))
+            {
+                RenderEmpty(context, 400);
+                return;
+            }
+
             Render200(context, CarData.GetTrainsetDataJson(trainsetId));
         }
 
@@ -306,12 +317,14 @@ namespace DvMod.RemoteDispatch
         {
             context.Response.ContentType = contentType;
             var bytes = Encoding.UTF8.GetBytes(s);
-            if (bytes.Length > 128 && (context.Request.Headers.GetValues("Accept-Encoding")?.Contains("gzip") ?? false))
+            if (bytes.Length > GzipMinBytes && (context.Request.Headers.GetValues("Accept-Encoding")?.Contains("gzip") ?? false))
             {
                 context.Response.Headers.Add("Content-Encoding", "gzip");
-                var mem = new MemoryStream(bytes);
-                using var gzip = new GZipStream(context.Response.OutputStream, CompressionMode.Compress);
-                mem.CopyTo(gzip);
+                using (var mem = new MemoryStream(bytes))
+                using (var gzip = new GZipStream(context.Response.OutputStream, CompressionMode.Compress))
+                {
+                    mem.CopyTo(gzip);
+                }
             }
             else
             {

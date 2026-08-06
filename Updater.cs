@@ -8,6 +8,8 @@ namespace DvMod.RemoteDispatch
 {
     public class Updater : MonoBehaviour
     {
+        private const float PlayerCheckIntervalSeconds = 0.1f;
+
         public void Start()
         {
             StartCoroutine(CheckPlayerTransformCoro());
@@ -40,7 +42,7 @@ namespace DvMod.RemoteDispatch
         {
             while (true)
             {
-                yield return WaitFor.Seconds(0.1f);
+                yield return WaitFor.Seconds(PlayerCheckIntervalSeconds);
                 PlayerData.CheckTransform();
             }
         }

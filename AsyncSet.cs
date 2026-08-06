@@ -10,12 +10,13 @@ namespace DvMod.RemoteDispatch
         private readonly object queueLock = new object();
         private readonly SemaphoreSlim semaphore = new SemaphoreSlim(0);
         private readonly Queue<T> queue = new Queue<T>();
+        private readonly HashSet<T> itemSet = new HashSet<T>();
 
         public void Add(T item)
         {
             lock (queueLock)
             {
-                if (!queue.Contains(item))
+                if (itemSet.Add(item))
                 {
                     queue.Enqueue(item);
                     semaphore.Release();
@@ -29,7 +30,11 @@ namespace DvMod.RemoteDispatch
             {
                 var result = new List<T>();
                 while (semaphore.Wait(0))
-                    result.Add(queue.Dequeue());
+                {
+                    var item = queue.Dequeue();
+                    itemSet.Remove(item);
+                    result.Add(item);
+                }
                 return result;
             }
         }
@@ -39,7 +44,13 @@ namespace DvMod.RemoteDispatch
             var success = await semaphore.WaitAsync(timeSpan).ConfigureAwait(true);
             T value = default;
             if (success)
-                lock (queueLock) value = queue.Dequeue();
+            {
+                lock (queueLock)
+                {
+                    value = queue.Dequeue();
+                    itemSet.Remove(value);
+                }
+            }
             return (success, value!);
         }
     }

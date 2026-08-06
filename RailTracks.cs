@@ -9,56 +9,17 @@ using UnityEngine;
 
 namespace DvMod.RemoteDispatch
 {
-    public static class World
-    {
-        public readonly struct Position
-        {
-            public readonly float x;
-            public readonly float z;
-
-            public Position(float x, float z)
-            {
-                this.x = x;
-                this.z = z;
-            }
-
-            public Position(Vector3 position) : this(position.x, position.z) { }
-            public Position(Transform transform) : this(transform.position) { }
-
-            public LatLon ToLatLon() => LatLon.From(this);
-        }
-
-        public readonly struct LatLon
-        {
-            private const int DECIMAL_PLACES = 8; // 1.11 mm
-            private const float EARTH_CIRCUMFERENCE = 40e6f;
-            private const float DEGREES_PER_METER = 360f / EARTH_CIRCUMFERENCE;
-
-            public readonly float latitude;
-            public readonly float longitude;
-
-            public LatLon(float latitude, float longitude)
-            {
-                this.latitude = (float)Math.Round(latitude, DECIMAL_PLACES);
-                this.longitude = (float)Math.Round(longitude, DECIMAL_PLACES);
-            }
-
-            public static LatLon From(Position p) => new LatLon(DEGREES_PER_METER * p.z, DEGREES_PER_METER * p.x);
-
-            public JToken ToJson() => new JArray(latitude, longitude);
-        }
-    }
-
     public static class RailTracks
     {
-        private const float SIMPLIFIED_RESOLUTION = 40f;
+        private const float SimplifiedResolution = 40f;
+        private const int MinPointsForSubdivision = 3;
 
         private static IEnumerable<World.LatLon> NormalizeTrackPoints(IEnumerable<World.Position> positions) => positions.Select(p => p.ToLatLon());
 
         public static Dictionary<RailTrack, IEnumerable<World.LatLon>> GetNormalizedTrackCoordinates() =>
             GetAllTrackPoints().ToDictionary(kvp => kvp.Key, kvp => NormalizeTrackPoints(kvp.Value));
 
-        public static Dictionary<RailTrack, IEnumerable<World.Position>> GetAllTrackPoints(float resolution = SIMPLIFIED_RESOLUTION)
+        public static Dictionary<RailTrack, IEnumerable<World.Position>> GetAllTrackPoints(float resolution = SimplifiedResolution)
         {
             if (!WorldStreamingInit.Instance || !WorldStreamingInit.IsLoaded)
                 throw new Exception("World not yet loaded");
@@ -67,42 +28,42 @@ namespace DvMod.RemoteDispatch
             return tracks.ToDictionary(track => track, track => GetTrackPoints(track, resolution));
         }
 
-        private static IEnumerable<World.Position> GetTrackPoints(RailTrack track, float resolution = SIMPLIFIED_RESOLUTION)
+        private static IEnumerable<World.Position> GetTrackPoints(RailTrack track, float resolution = SimplifiedResolution)
         {
             var pointSet = track.GetKinkedPointSet();
             EquiPointSet simplified = EquiPointSet.ResampleEquidistant(
                 pointSet,
-                Mathf.Min(resolution, (float)pointSet.span / 3));
+                Mathf.Min(resolution, (float)pointSet.span / MinPointsForSubdivision));
 
             foreach (var pt in simplified.points)
                 yield return new World.Position((float)pt.position.x, (float)pt.position.z);
         }
 
-        private static string? trackPointJSON;
+        private static string? trackPointJson;
 
-        private static string GenerateTrackPointJSON()
+        private static string GenerateTrackPointJson()
         {
-            trackPointJSON = JsonConvert.SerializeObject(
+            trackPointJson = JsonConvert.SerializeObject(
                 GetNormalizedTrackCoordinates().ToDictionary(
                     kvp => kvp.Key.LogicTrack().ID,
                     kvp => kvp.Value.Select(ll => ll.ToJson())));
-            return trackPointJSON;
+            return trackPointJson;
         }
 
-        public static async Task<string> GetTrackPointJSON()
+        public static async Task<string> GetTrackPointJson()
         {
-            if (trackPointJSON != null)
-                return trackPointJSON;
+            if (trackPointJson != null)
+                return trackPointJson;
             if (!WorldStreamingInit.Instance)
                 throw new Exception("World not yet loaded");
 
             if (WorldStreamingInit.IsLoaded)
-                return GenerateTrackPointJSON();
+                return GenerateTrackPointJson();
 
             var tcs = new TaskCompletionSource<string>();
-            WorldStreamingInit.LoadingFinished += () => tcs.TrySetResult(GenerateTrackPointJSON());
+            WorldStreamingInit.LoadingFinished += () => tcs.TrySetResult(GenerateTrackPointJson());
             if (WorldStreamingInit.IsLoaded)
-                return GenerateTrackPointJSON();
+                return GenerateTrackPointJson();
 
             return await tcs.Task.ConfigureAwait(false);
         }
@@ -110,15 +71,15 @@ namespace DvMod.RemoteDispatch
 
     public static class Junctions
     {
-        private static string junctionPointJSON = string.Empty;
+        private static string junctionPointJson = string.Empty;
 
-        public static string GetJunctionPointJSON()
+        public static string GetJunctionPointJson()
         {
             if (!WorldStreamingInit.Instance || !WorldStreamingInit.IsLoaded)
                 throw new Exception("World not yet loaded");
-            if (string.IsNullOrEmpty(junctionPointJSON))
+            if (string.IsNullOrEmpty(junctionPointJson))
             {
-                junctionPointJSON = JsonConvert.SerializeObject(
+                junctionPointJson = JsonConvert.SerializeObject(
                     RailTrackRegistry.Instance.OrderedJunctions.Select(j =>
                     {
                         var moved = j.position - WorldMover.currentMove;
@@ -129,7 +90,7 @@ namespace DvMod.RemoteDispatch
                     })
                 );
             }
-            return junctionPointJSON;
+            return junctionPointJson;
         }
 
         public static IEnumerable<byte> GetAllJunctionStates()
@@ -139,7 +100,7 @@ namespace DvMod.RemoteDispatch
             return RailTrackRegistry.Instance.OrderedJunctions.Select(j => j.selectedBranch);
         }
 
-        public static string GetJunctionStateJSON()
+        public static string GetJunctionStateJson()
         {
             return JsonConvert.SerializeObject(GetAllJunctionStates());
         }

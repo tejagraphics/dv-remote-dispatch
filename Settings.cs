@@ -16,9 +16,10 @@ namespace DvMod.RemoteDispatch
 
         public readonly string? version = Main.mod?.Info.Version;
 
-        const char EnDash = '\u2013';
+        private const char EnDash = '\u2013';
+        private const int MinPort = 1024;
+        private const int MaxPort = 65535;
         private string uncommittedPort = "initial";
-        private string message = "";
 
         public void Draw()
         {
@@ -27,14 +28,11 @@ namespace DvMod.RemoteDispatch
             if (uncommittedPort == "initial")
                 uncommittedPort = serverPort.ToString();
 
-            GUILayout.Label($"Network port (1024{EnDash}65535)");
+            GUILayout.Label($"Network port ({MinPort}{EnDash}{MaxPort}). Restart required to apply.");
             uncommittedPort = GUILayout.TextField(uncommittedPort, maxLength: 5);
             uncommittedPort = new string(uncommittedPort.Where(c => char.IsDigit(c)).ToArray());
-            bool isValidPort = int.TryParse(uncommittedPort, out var parsed) && parsed >= 1024 && parsed <= 65535;
-
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(message);
-            GUILayout.EndHorizontal();
+            if (int.TryParse(uncommittedPort, out var parsed) && parsed >= MinPort && parsed <= MaxPort)
+                serverPort = parsed;
 
             GUILayout.BeginHorizontal();
             GUILayout.Label("Password (blank for none)");
@@ -84,9 +82,28 @@ namespace DvMod.RemoteDispatch
 
         public readonly List<PlayerPermissions> permissions = new List<PlayerPermissions>();
 
+        private bool isSubscribed;
+
         public Permissions()
         {
+        }
+
+        /// <summary>Subscribes to session events. Must be called once after the active Permissions instance is established.</summary>
+        public void Subscribe()
+        {
+            if (isSubscribed)
+                return;
             Sessions.OnSessionStarted += OnSessionStarted;
+            isSubscribed = true;
+        }
+
+        /// <summary>Unsubscribes from session events. Call before replacing the active Permissions instance.</summary>
+        public void Unsubscribe()
+        {
+            if (!isSubscribed)
+                return;
+            Sessions.OnSessionStarted -= OnSessionStarted;
+            isSubscribed = false;
         }
 
         public bool HasJunctionPermission(string username)

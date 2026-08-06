@@ -1,0 +1,67 @@
+<Project>
+  <!--
+    ============================================================================
+    Derail Valley Mod Build Configuration
+    ============================================================================
+
+    SETUP:
+      1. Copy this file to "Directory.Build.targets" (remove .template)
+      2. Set DerailValleyDir below to your Derail Valley installation path
+      3. Run: dotnet build -c Release
+
+    FINDING YOUR GAME PATH:
+      Steam:  Right-click Derail Valley in Steam → Manage → Browse Local Files
+      GOG:    Check your GOG installation directory
+
+    COMMON PATHS:
+      Steam:  C:\Program Files (x86)\Steam\steamapps\common\Derail Valley
+      GOG:    C:\GOG Games\Derail Valley
+      Linux:  ~/.steam/steam/steamapps/common/Derail Valley
+
+    The build system will also try to auto-detect common Steam paths.
+    If your game is installed to a standard location, you may not need
+    to change anything — just copy this file as-is.
+    ============================================================================
+  -->
+
+  <!-- ======== SET YOUR GAME PATH HERE ======== -->
+  <PropertyGroup>
+    <!--
+      Uncomment and edit the line below if auto-detection does not work:
+      <DerailValleyDir>C:\Your\Path\To\Derail Valley</DerailValleyDir>
+    -->
+  </PropertyGroup>
+
+  <!-- ======== AUTO-DETECTION (checked only if DerailValleyDir is not set above) ======== -->
+  <PropertyGroup>
+    <!-- Windows Steam (default + common library locations) -->
+    <DerailValleyDir Condition="'$(DerailValleyDir)' == '' And Exists('C:\Program Files (x86)\Steam\steamapps\common\Derail Valley\DerailValley_Data')">C:\Program Files (x86)\Steam\steamapps\common\Derail Valley</DerailValleyDir>
+    <DerailValleyDir Condition="'$(DerailValleyDir)' == '' And Exists('C:\Program Files\Steam\steamapps\common\Derail Valley\DerailValley_Data')">C:\Program Files\Steam\steamapps\common\Derail Valley</DerailValleyDir>
+    <DerailValleyDir Condition="'$(DerailValleyDir)' == '' And Exists('D:\Steam\steamapps\common\Derail Valley\DerailValley_Data')">D:\Steam\steamapps\common\Derail Valley</DerailValleyDir>
+    <DerailValleyDir Condition="'$(DerailValleyDir)' == '' And Exists('D:\SteamLibrary\steamapps\common\Derail Valley\DerailValley_Data')">D:\SteamLibrary\steamapps\common\Derail Valley</DerailValleyDir>
+    <DerailValleyDir Condition="'$(DerailValleyDir)' == '' And Exists('E:\SteamLibrary\steamapps\common\Derail Valley\DerailValley_Data')">E:\SteamLibrary\steamapps\common\Derail Valley</DerailValleyDir>
+    <DerailValleyDir Condition="'$(DerailValleyDir)' == '' And Exists('F:\SteamLibrary\steamapps\common\Derail Valley\DerailValley_Data')">F:\SteamLibrary\steamapps\common\Derail Valley</DerailValleyDir>
+    <!-- Windows GOG -->
+    <DerailValleyDir Condition="'$(DerailValleyDir)' == '' And Exists('C:\GOG Games\Derail Valley\DerailValley_Data')">C:\GOG Games\Derail Valley</DerailValleyDir>
+  </PropertyGroup>
+
+  <!-- ======== ASSEMBLY SEARCH PATHS (do not edit below this line) ======== -->
+  <PropertyGroup Condition="'$(DerailValleyDir)' != ''">
+    <ManagedDir>$(DerailValleyDir)\DerailValley_Data\Managed</ManagedDir>
+    <AssemblySearchPaths>
+      $(AssemblySearchPaths);
+      $(ManagedDir);
+      $(ManagedDir)\UnityModManager;
+    </AssemblySearchPaths>
+  </PropertyGroup>
+
+  <!-- ======== BUILD VALIDATION ======== -->
+  <Target Name="ValidateGamePath" BeforeTargets="ResolveAssemblyReferences">
+    <Error
+      Condition="'$(DerailValleyDir)' == ''"
+      Text="&#10;&#10;ERROR: Derail Valley installation not found.&#10;&#10;Fix: Open Directory.Build.targets and set DerailValleyDir to your game path.&#10;Example: &lt;DerailValleyDir&gt;C:\Program Files (x86)\Steam\steamapps\common\Derail Valley&lt;/DerailValleyDir&gt;&#10;" />
+    <Error
+      Condition="'$(DerailValleyDir)' != '' And !Exists('$(ManagedDir)\Assembly-CSharp.dll')"
+      Text="&#10;&#10;ERROR: Assembly-CSharp.dll not found at '$(ManagedDir)'.&#10;&#10;Fix: Verify DerailValleyDir points to the folder containing DerailValley.exe.&#10;" />
+  </Target>
+</Project>

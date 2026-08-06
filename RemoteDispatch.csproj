@@ -1,45 +1,62 @@
 <Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>8.0</LangVersion>
     <Nullable>enable</Nullable>
     <RootNamespace>DvMod.RemoteDispatch</RootNamespace>
+    <AssemblyName>RemoteDispatch</AssemblyName>
     <InformationalVersion>1.2.1</InformationalVersion>
+
+    <!-- Suppress warnings about transitive framework refs from NuGet packages -->
+    <NoWarn>$(NoWarn);NU1701</NoWarn>
+
+    <!-- Krafs.Publicizer: use Unsafe strategy to avoid IgnoresAccessChecksTo attribute issues -->
+    <PublicizerRuntimeStrategies>Unsafe</PublicizerRuntimeStrategies>
   </PropertyGroup>
 
+  <!-- NuGet packages -->
   <ItemGroup>
-    <PackageReference Include="Krafs.Publicizer" Version="2.2.1"/>
-    <Publicize Include="Assembly-CSharp" IncludeCompilerGeneratedMembers="false"/>
+    <PackageReference Include="Krafs.Publicizer" Version="2.2.1" />
+    <PackageReference Include="UnityModManager" Version="0.27.2" />
   </ItemGroup>
 
+  <!-- Krafs.Publicizer: make internal members of Assembly-CSharp accessible -->
   <ItemGroup>
-    <Reference Include="Assembly-CSharp"/>
-    <Reference Include="DV.BrakeSystem"/>
-    <Reference Include="DV.Simulation"/>
-    <Reference Include="DV.Common"/>
-    <Reference Include="DV.Interaction"/>
-    <Reference Include="DV.PointSet"/>
-    <Reference Include="DV.RailTrack" />
-    <Reference Include="DV.ThingTypes"/>
-    <Reference Include="DV.Utils"/>
-    <Reference Include="Microsoft.CSharp"/>
-    <Reference Include="Newtonsoft.Json"/>
-    <Reference Include="net.smkd.vector3d"/>
-    <Reference Include="WorldStreamer" />
+    <Publicize Include="Assembly-CSharp" IncludeCompilerGeneratedMembers="false" />
   </ItemGroup>
 
+  <!-- Game assemblies (resolved via AssemblySearchPaths in Directory.Build.targets) -->
   <ItemGroup>
-    <Reference Include="UnityEngine.CoreModule"/>
-    <Reference Include="UnityEngine.IMGUIModule"/>
-    <PackageReference Include="UnityModManager" Version="0.27.2"/>
+    <Reference Include="Assembly-CSharp">      <Private>false</Private></Reference>
+    <Reference Include="DV.BrakeSystem">        <Private>false</Private></Reference>
+    <Reference Include="DV.Common">             <Private>false</Private></Reference>
+    <Reference Include="DV.Interaction">        <Private>false</Private></Reference>
+    <Reference Include="DV.PointSet">           <Private>false</Private></Reference>
+    <Reference Include="DV.RailTrack">          <Private>false</Private></Reference>
+    <Reference Include="DV.Simulation">         <Private>false</Private></Reference>
+    <Reference Include="DV.ThingTypes">         <Private>false</Private></Reference>
+    <Reference Include="DV.Utils">              <Private>false</Private></Reference>
+    <Reference Include="Microsoft.CSharp">      <Private>false</Private></Reference>
+    <Reference Include="Newtonsoft.Json">        <Private>false</Private></Reference>
+    <Reference Include="net.smkd.vector3d">     <Private>false</Private></Reference>
+    <Reference Include="WorldStreamer">          <Private>false</Private></Reference>
   </ItemGroup>
 
+  <!-- Unity engine assemblies (also from Managed folder) -->
   <ItemGroup>
-    <EmbeddedResource Include="icon.svg"/>
-    <EmbeddedResource Include="index.html"/>
-    <EmbeddedResource Include="leaflet.rotatedImageOverlay.js"/>
-    <EmbeddedResource Include="licenses/*.png"/>
-    <EmbeddedResource Include="main.js"/>
-    <EmbeddedResource Include="style.css"/>
+    <Reference Include="UnityEngine.CoreModule"> <Private>false</Private></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><Private>false</Private></Reference>
   </ItemGroup>
+
+  <!-- Web UI files embedded into the DLL -->
+  <ItemGroup>
+    <EmbeddedResource Include="icon.svg" />
+    <EmbeddedResource Include="index.html" />
+    <EmbeddedResource Include="leaflet.rotatedImageOverlay.js" />
+    <EmbeddedResource Include="licenses/*.png" />
+    <EmbeddedResource Include="main.js" />
+    <EmbeddedResource Include="style.css" />
+  </ItemGroup>
+
 </Project>

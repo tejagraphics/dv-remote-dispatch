@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Derail Valley — CTC Dispatch Map</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #161616; overflow: auto; min-height: 100vh; }
+  #map { display: block; width: 100vw; height: calc(100vh - 50px); }
+
+  .trk { stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; transition: stroke 200ms ease; }
+  .stn-dot { fill: none; stroke: #666; stroke-width: 1.5; }
+  .stn-name { fill: #999; font: 700 9px 'Consolas','Monaco',monospace; letter-spacing: 0.5px; }
+  .stn-code { fill: #555; font: 600 7px 'Consolas','Monaco',monospace; }
+  .jlbl { fill: #555; font: 600 7px 'Consolas','Monaco',monospace; }
+
+  .title-bar {
+    position: fixed; top: 0; left: 0; right: 0; height: 24px;
+    background: #0c0c0c; border-bottom: 1px solid #222;
+    display: flex; align-items: center; padding: 0 16px;
+    font: 10px 'Consolas','Monaco',monospace; color: #555;
+    letter-spacing: 1px; text-transform: uppercase; z-index: 10;
+  }
+  #status {
+    position: fixed; bottom: 0; left: 0; right: 0; height: 26px;
+    background: #0c0c0c; border-top: 1px solid #222;
+    display: flex; align-items: center; padding: 0 16px;
+    font: 10px 'Consolas','Monaco',monospace; color: #555; gap: 20px; z-index: 10;
+  }
+  #status .v { color: #999; font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="title-bar">Derail Valley — CTC Dispatch Console</div>
+<svg id="map" viewBox="0 0 1800 950" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1800" height="950" fill="#161616"/>
+  <g id="g-tracks"></g>
+  <g id="g-tris"></g>
+  <g id="g-labels"></g>
+</svg>
+<div id="status">
+  <span>JUNCTIONS: <span class="v" id="nj">0</span></span>
+  <span>CLICK SWITCH TO TOGGLE</span>
+  <span id="act" class="v"></span>
+</div>
+
+<script>
+// ============================================================
+//  DERAIL VALLEY CTC SCHEMATIC
+//  Laid out like a real dispatcher's track diagram:
+//  - Main lines run roughly horizontal
+//  - Branches angle off at 45°
+//  - Stations arranged left-to-right, top-to-bottom
+//  - Track topology matches the actual game world
+// ============================================================
+
+const A = '#b0b0b0';   // active track
+const D = '#2a2a2a';   // inactive/dim
+const easeOut = t => 1 - Math.pow(1-t, 3);
+const DUR = 300;
+const TL = 11, TW = 7; // triangle length, half-width
+
+// ============================================================
+//  STATION POSITIONS — systematic CTC schematic layout
+//
+//  The network has two main horizontal corridors:
+//    NORTH LINE: IMW — MF — FRC — SM — FF — OWN — MB — IME
+//    SOUTH LINE: CW — OWC — FM — OR — CP — FRS — HB
+//  Connected by vertical links at SM/OR and GF/CMS/CME
+//  SW branches off the south-west
+//  CSW/CS are the western terminus
+// ============================================================
+
+const S = {
+  // === NORTH CORRIDOR (y ≈ 250) ===
+  IMW:  [150,  200],
+  MF:   [300,  250],
+  FRC:  [480,  280],
+  SM:   [680,  300],
+  FF:   [880,  220],
+  OWN:  [1050, 250],
+  MB:   [1200, 180],
+  IME:  [1400, 150],
+
+  // === SOUTH CORRIDOR (y ≈ 550) ===
+  CW:   [150,  500],
+  CS:   [150,  600],
+  CSW:  [150,  700],
+  OWC:  [320,  500],
+  FM:   [480,  520],
+  OR:   [640,  500],
+  CP:   [800,  550],
+  FRS:  [950,  620],
+  SW:   [200,  780],
+
+  // === EAST CLUSTER (right side) ===
+  GF:   [1200, 380],
+  CMS:  [1350, 380],
+  CME:  [1500, 320],
+
+  // === HARBOR (south-east) ===
+  HB:   [1200, 650],
+};
+
+// ============================================================
+//  TRACK CONNECTIONS — actual Derail Valley route network
+//  Each entry: [stationA, stationB, isMainline]
+// ============================================================
+
+const tracks = [
+  // North corridor (main line)
+  ['IMW', 'MF',   true],
+  ['MF',  'FRC',  true],
+  ['FRC', 'SM',   true],
+  ['SM',  'FF',   true],
+  ['FF',  'OWN',  true],
+  ['OWN', 'MB',   true],
+  ['MB',  'IME',  true],
+
+  // South corridor
+  ['CW',  'OWC',  true],
+  ['OWC', 'FM',   true],
+  ['FM',  'OR',   true],
+  ['OR',  'CP',   true],
+  ['CP',  'FRS',  true],
+
+  // West connections
+  ['CW',  'CS',   true],
+  ['CS',  'CSW',  true],
+  ['CSW', 'SW',   true],
+
+  // North-South links
+  ['FRC', 'OWC',  false],  // tunnel/shortcut
+  ['SM',  'OR',   false],  // central link
+  ['SM',  'GF',   false],  // east link
+
+  // East cluster
+  ['OWN', 'GF',   false],
+  ['GF',  'CMS',  true],
+  ['CMS', 'CME',  true],
+  ['CME', 'IME',  false],
+
+  // Harbor connections
+  ['GF',  'HB',   false],
+  ['FRS', 'HB',   false],
+  ['CP',  'HB',   false],
+
+  // Additional connections from game
+  ['FRS', 'SW',   false],  // forest south to sawmill area
+  ['FF',  'MB',   false],  // food factory shortcut
+];
+
+// ============================================================
+//  JUNCTION DEFINITIONS
+//  Placed at points where routes diverge
+//  [position, mainTarget, divTarget]
+// ============================================================
+
+const jDefs = [];
+let jId = 1;
+
+function mid(a, b, t) {
+  t = t || 0.5;
+  return [S[a][0] + (S[b][0]-S[a][0])*t, S[a][1] + (S[b][1]-S[a][1])*t];
+}
+
+function addJ(pos, mainStn, divStn) {
+  const mx = S[mainStn][0]-pos[0], my = S[mainStn][1]-pos[1];
+  const ml = Math.sqrt(mx*mx+my*my);
+  const dx = S[divStn][0]-pos[0], dy = S[divStn][1]-pos[1];
+  const dl = Math.sqrt(dx*dx+dy*dy);
+  jDefs.push({
+    id: jId++,
+    fp: pos,
+    md: [mx/ml, my/ml],
+    dd: [dx/dl, dy/dl],
+    st: 0, anim: false
+  });
+}
+
+// North line junctions
+addJ(mid('MF','FRC', 0.85),  'FRC', 'OWC');   // FRC junction: main→FRC, div→OWC via tunnel
+addJ(mid('SM','FF', 0.15),   'FF',  'GF');     // SM east: main→FF, div→GF
+addJ(mid('SM','FRC', 0.15),  'FRC', 'OR');     // SM west: main→FRC, div→OR
+addJ(mid('OWN','MB', 0.3),   'MB',  'GF');     // OWN east: main→MB, div→GF
+addJ(mid('FF','OWN', 0.8),   'OWN', 'MB');     // near OWN: main→OWN, div shortcut
+addJ(mid('MB','IME', 0.6),   'IME', 'CME');    // MB-IME: main→IME, div→CME
+
+// South line junctions
+addJ(mid('CW','CS', 0.5),    'CS',  'OWC');    // CW area: main→CS, div→OWC
+addJ(mid('FM','OR', 0.8),    'OR',  'SM');      // near OR: main→OR, div→SM link
+addJ(mid('CP','FRS', 0.5),   'FRS', 'HB');     // CP-FRS: main→FRS, div→HB
+addJ(mid('FRS','HB', 0.3),   'HB',  'SW');     // FRS area: main→HB, div→SW
+
+// East junctions
+addJ(mid('GF','CMS', 0.5),   'CMS', 'HB');     // GF-CMS: main→CMS, div→HB
+addJ(mid('CMS','CME', 0.5),  'CME', 'IME');     // CMS-CME: main→CME, div→IME
+
+// ============================================================
+//  RENDER
+// ============================================================
+
+const svg = document.getElementById('map');
+const gT = document.getElementById('g-tracks');
+const gR = document.getElementById('g-tris');
+const gL = document.getElementById('g-labels');
+
+// Draw tracks
+tracks.forEach(([a, b, main], i) => {
+  const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  l.setAttribute('x1', S[a][0]); l.setAttribute('y1', S[a][1]);
+  l.setAttribute('x2', S[b][0]); l.setAttribute('y2', S[b][1]);
+  l.classList.add('trk');
+  l.setAttribute('stroke', main ? A : D);
+  l.setAttribute('stroke-width', main ? '2.5' : '2');
+  l.id = `t${i}`;
+  gT.appendChild(l);
+});
+
+// Draw stations
+Object.entries(S).forEach(([code, [x, y]]) => {
+  // Dot
+  const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 5);
+  c.classList.add('stn-dot');
+  gL.appendChild(c);
+
+  // Name
+  const names = {
+    IMW:'Iron Mine West', MF:'Machine Factory', FRC:'Forest Central', SM:'Steel Mill',
+    FF:'Food Factory', OWN:'Oil Well North', MB:'Military Base', IME:'Iron Mine East',
+    CW:'City West', CS:'City South', CSW:'City SW', OWC:'Oil Well Central', FM:'Farm',
+    OR:'Oil Refinery', CP:'Coal Power', FRS:'Forest South', SW:'Sawmill',
+    GF:'Goods Factory', CMS:'Coal Mine S', CME:'Coal Mine E', HB:'Harbor',
+  };
+
+  const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  // Position label to avoid track overlaps
+  const above = ['IMW','MF','FF','OWN','MB','IME','CME','CW','SM','FRC'].includes(code);
+  t.setAttribute('x', x); t.setAttribute('y', above ? y - 14 : y + 20);
+  t.setAttribute('text-anchor', 'middle');
+  t.classList.add('stn-name');
+  t.textContent = names[code] || code;
+  gL.appendChild(t);
+
+  // Code
+  const t2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  t2.setAttribute('x', x); t2.setAttribute('y', above ? y - 5 : y + 29);
+  t2.setAttribute('text-anchor', 'middle');
+  t2.classList.add('stn-code');
+  t2.textContent = code;
+  gL.appendChild(t2);
+});
+
+// ============================================================
+//  JUNCTIONS — triangles generated from geometry
+// ============================================================
+
+document.getElementById('nj').textContent = jDefs.length;
+const actEl = document.getElementById('act');
+
+jDefs.forEach(j => {
+  const [fx, fy] = j.fp;
+  const mRad = Math.atan2(j.md[1], j.md[0]);
+  const dRad = Math.atan2(j.dd[1], j.dd[0]);
+  j.mDeg = mRad * 180 / Math.PI;
+  let diff = (dRad * 180 / Math.PI) - j.mDeg;
+  while (diff > 180) diff -= 360;
+  while (diff < -180) diff += 360;
+  j.dDeg = j.mDeg + diff;
+
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.id = `j${j.id}`;
+  g.style.cursor = 'pointer';
+  g.setAttribute('transform', `rotate(${j.mDeg},${fx},${fy})`);
+
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+  p.setAttribute('points',
+    `${fx+TL},${fy} ${fx-TL*0.25},${fy-TW} ${fx-TL*0.25},${fy+TW}`);
+  p.setAttribute('fill', '#c0c0c0');
+  p.style.transition = 'fill 150ms';
+  g.appendChild(p);
+
+  g.addEventListener('mouseenter', () => p.setAttribute('fill', '#fff'));
+  g.addEventListener('mouseleave', () => p.setAttribute('fill', '#c0c0c0'));
+
+  gR.appendChild(g);
+  j.el = g;
+
+  // Label
+  const bisect = (mRad + dRad) / 2 + Math.PI;
+  const lb = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  lb.setAttribute('x', fx + Math.cos(bisect) * 14);
+  lb.setAttribute('y', fy + Math.sin(bisect) * 14 + 3);
+  lb.setAttribute('text-anchor', 'middle');
+  lb.classList.add('jlbl');
+  lb.textContent = j.id;
+  gL.appendChild(lb);
+
+  // Click
+  g.addEventListener('click', () => {
+    if (j.anim) return;
+    j.anim = true;
+    const o = j.st, n = 1 - o;
+    j.st = n;
+    const from = o === 0 ? j.mDeg : j.dDeg;
+    const to = n === 0 ? j.mDeg : j.dDeg;
+    const t0 = performance.now();
+    actEl.textContent = `J-${j.id} → ${n===0?'MAIN':'DIV'}`;
+
+    (function frame(now) {
+      const r = Math.min((now-t0)/DUR, 1);
+      const e = easeOut(r);
+      const a = from + (to-from) * e;
+      g.setAttribute('transform', `rotate(${a},${fx},${fy})`);
+      if (r < 1) requestAnimationFrame(frame);
+      else { g.setAttribute('transform', `rotate(${to},${fx},${fy})`); j.anim = false; }
+    })(performance.now());
+  });
+});
+</script>
+</body>
+</html>

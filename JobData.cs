@@ -13,8 +13,18 @@ namespace DvMod.RemoteDispatch
 {
     public static class JobData
     {
-        private static readonly Dictionary<TrainCar, string> jobIdForCar = InitializeJobIdForCar();
+        private static Dictionary<TrainCar, string>? _jobIdForCar;
         private static Dictionary<string, Job> jobForId = new Dictionary<string, Job>();
+
+        private static Dictionary<TrainCar, string> jobIdForCar
+        {
+            get
+            {
+                if (_jobIdForCar == null)
+                    _jobIdForCar = InitializeJobIdForCar();
+                return _jobIdForCar;
+            }
+        }
 
         private const JobLicenses LicensesToExport =
           JobLicenses.Hazmat1 | JobLicenses.Hazmat2 | JobLicenses.Hazmat3 |

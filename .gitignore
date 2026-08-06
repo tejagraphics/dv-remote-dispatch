@@ -3,4 +3,6 @@
 /obj/
 /dv
 /.idea/
+
+# User-specific build config (created from .template)
 Directory.Build.targets

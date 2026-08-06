@@ -1,7 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Derail Valley Remote Dispatch Console</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Derail Valley Remote Dispatch</title>
   <link rel="icon" href="res/icon.svg">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.7.1/dist/leaflet.css" integrity="sha256-BPfK9M5v34c2XP6p0cxVz1mUQLst0gTLk0mlc7kuodA=" crossorigin="anonymous">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-sidebar-v2@3.2.3/css/leaflet-sidebar.min.css" integrity="sha256-10dwwxs/pdWEYoC56aJvmY3kbMMa9/3uSWWNkGcrGq8=" crossorigin="anonymous">
@@ -14,6 +16,12 @@
   <script src="https://cdn.jsdelivr.net/npm/tablesort@5.2.1/src/tablesort.js" integrity="sha256-ams/0yjSE7HGIRWB/A3VtW3Z24eOT+5z0z9d1pms7T4=" crossorigin="anonymous"></script>
 </head>
 <body>
+
+<!-- Connection status indicator -->
+<div id="connectionStatus" class="connection-status connected" title="Connected">
+  <i class="fas fa-wifi"></i>
+</div>
+
 <div id="sidebar" class="leaflet-sidebar collapsed">
   <div class="leaflet-sidebar-tabs">
     <ul role="tablist">
@@ -24,82 +32,153 @@
     </ul>
   </div>
   <div class="leaflet-sidebar-content">
+
+    <!-- Cars Tab -->
     <div class="leaflet-sidebar-pane" id="carsTab">
-      <table id="carList">
+      <h2 class="sidebar-heading"><i class="fas fa-train"></i> Rolling Stock</h2>
+      <div class="car-stats">
+        <span id="carCount" class="stat-badge">0 cars</span>
+        <span id="locoCount" class="stat-badge stat-badge-loco">0 locos</span>
+      </div>
+      <div class="search-box">
+        <i class="fas fa-search search-icon"></i>
+        <input id="carSearchText" type="text" placeholder="Filter cars...">
+      </div>
+      <table id="carList" class="data-table">
         <thead>
           <tr><th>ID</th><th>Job</th><th>Dest</th></tr>
         </thead>
         <tbody id="carListBody"></tbody>
       </table>
     </div>
+
+    <!-- Jobs Tab -->
     <div class="leaflet-sidebar-pane" id="jobsTab">
-      <input id="jobSearchText" type="text" placeholder="Search...">
-      <label>active only<input id="jobActiveOnly" type="checkbox"></label>
-      <table id="jobList">
+      <h2 class="sidebar-heading"><i class="fas fa-clipboard-list"></i> Jobs</h2>
+      <div class="job-stats">
+        <span id="jobCount" class="stat-badge">0 jobs</span>
+        <span id="activeJobCount" class="stat-badge stat-badge-active">0 active</span>
+      </div>
+      <div class="search-box">
+        <i class="fas fa-search search-icon"></i>
+        <input id="jobSearchText" type="text" placeholder="Search jobs...">
+      </div>
+      <label class="checkbox-label">
+        <input id="jobActiveOnly" type="checkbox">
+        <span>Active only</span>
+      </label>
+      <table id="jobList" class="data-table">
         <tbody id="jobListBody"></tbody>
       </table>
     </div>
+
+    <!-- Loco Control Tab -->
     <div class="leaflet-sidebar-pane" id="locoControlTab">
-      <div id="locoControlIndicators">
-        <label for="locoControlLocoId">L-</label>
-        <select id="locoControlLocoId"></select>
-        <span id="locoControlBrakePipe"></span> bar
-        <span id="locoControlForwardSpeed"></span> km/h
+      <h2 class="sidebar-heading"><i class="fas fa-gamepad"></i> Locomotive Control</h2>
+
+      <div class="loco-selector">
+        <label for="locoControlLocoId">Locomotive</label>
+        <div class="loco-select-wrapper">
+          <span class="loco-prefix">L-</span>
+          <select id="locoControlLocoId"></select>
+        </div>
       </div>
-      <div id="locoControlControls">
-        <div>
-          <label for="locoControlTrainBrakeInput">Train Brk</label>
-          <input id="locoControlTrainBrakeInput" type="range">
+
+      <div class="loco-gauges">
+        <div class="gauge">
+          <div class="gauge-label">Speed</div>
+          <div class="gauge-value"><span id="locoControlForwardSpeed">--</span> <small>km/h</small></div>
         </div>
-        <div>
-          <label for="locoControlIndependentBrakeInput">Indep Brk</label>
-          <input id="locoControlIndependentBrakeInput" type="range">
+        <div class="gauge">
+          <div class="gauge-label">Brake Pipe</div>
+          <div class="gauge-value"><span id="locoControlBrakePipe">--</span> <small>bar</small></div>
         </div>
-        <div>
-          <label>Reverser</label>
-          <span id="locoControlReverserReverseButton" class="locoControlButton" locoControlCommand="reverse"><i class="far fa-play-circle fa-flip-horizontal" title="Reverse"></i></span>
-          <span id="locoControlReverserForwardButton" class="locoControlButton" locoControlCommand="forward"><i class="far fa-play-circle" title="Forward"></i></span>
+        <div class="gauge" id="slipIndicatorGauge">
+          <div class="gauge-label">Wheelslip</div>
+          <div class="gauge-value" id="slipIndicator">—</div>
         </div>
-        <div>
+      </div>
+
+      <div id="locoControlControls" class="loco-controls">
+        <div class="control-row">
           <label for="locoControlThrottleInput">Throttle</label>
-          <input id="locoControlThrottleInput" type="range">
+          <input id="locoControlThrottleInput" type="range" min="0" max="100" value="0" class="range-throttle">
+          <span class="range-value" id="throttleValue">0%</span>
         </div>
-        <div>
-          <button id="locoControlCoupleButton">Couple</button>
+        <div class="control-row">
+          <label>Reverser</label>
+          <div class="reverser-buttons">
+            <button id="locoControlReverserReverseButton" class="reverser-btn" locoControlCommand="reverse" title="Reverse">
+              <i class="far fa-play-circle fa-flip-horizontal"></i> REV
+            </button>
+            <span id="reverserIndicator" class="reverser-indicator">N</span>
+            <button id="locoControlReverserForwardButton" class="reverser-btn" locoControlCommand="forward" title="Forward">
+              FWD <i class="far fa-play-circle"></i>
+            </button>
+          </div>
         </div>
-        <div>
-          <button id="locoControlUncoupleButton">Uncouple</button>
-          <select id="locoControlUncoupleSelect"></select>
+        <div class="control-row">
+          <label for="locoControlTrainBrakeInput">Train Brake</label>
+          <input id="locoControlTrainBrakeInput" type="range" min="0" max="100" value="0" class="range-brake">
+          <span class="range-value" id="trainBrakeValue">0%</span>
+        </div>
+        <div class="control-row">
+          <label for="locoControlIndependentBrakeInput">Indep Brake</label>
+          <input id="locoControlIndependentBrakeInput" type="range" min="0" max="100" value="0" class="range-brake">
+          <span class="range-value" id="indepBrakeValue">0%</span>
+        </div>
+        <div class="coupling-controls">
+          <button id="locoControlCoupleButton" class="btn btn-couple" title="Couple nearby car">
+            <i class="fas fa-link"></i> Couple
+          </button>
+          <div class="uncouple-group">
+            <button id="locoControlUncoupleButton" class="btn btn-uncouple" title="Uncouple">
+              <i class="fas fa-unlink"></i> Uncouple
+            </button>
+            <select id="locoControlUncoupleSelect"></select>
+          </div>
         </div>
       </div>
     </div>
+
+    <!-- Settings Tab -->
     <div class="leaflet-sidebar-pane" id="settingsTab">
-      <table>
-        <tr>
-          <th><label for="themeDropdown">Theme</label></th>
-          <td>
-            <select name="theme" id="themeDropdown">
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
-            </select>
-          </td>
-        </tr>
-        <tr>
-          <th><label for="carColorDropdown">Car color</label></th>
-          <td>
-            <select name="carColor" id="carColorDropdown">
-              <option value="jobId">by job ID</option>
-              <option value="jobType">by job type</option>
-              <option value="destination">by destination</option>
-              <option value="carType">by car type</option>
-            </select>
-          </td>
-        </tr>
-      </table>
+      <h2 class="sidebar-heading"><i class="fas fa-cog"></i> Settings</h2>
+      <div class="settings-group">
+        <div class="setting-row">
+          <label for="themeDropdown">Theme</label>
+          <select name="theme" id="themeDropdown" class="setting-select">
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label for="carColorDropdown">Car Color</label>
+          <select name="carColor" id="carColorDropdown" class="setting-select">
+            <option value="jobId">by Job ID</option>
+            <option value="jobType">by Job Type</option>
+            <option value="destination">by Destination</option>
+            <option value="carType">by Car Type</option>
+          </select>
+        </div>
+      </div>
+      <div class="settings-about">
+        <p>Remote Dispatch for Derail Valley</p>
+        <p class="text-muted">Click junctions on the map to toggle them</p>
+      </div>
     </div>
+
   </div>
 </div>
-<div id="map" class="dark" style="height:100vh"></div>
+
+<div id="map" class="dark"></div>
+
+<!-- Minimap -->
+<div id="minimap" title="Click to navigate">
+  <canvas id="minimapCanvas"></canvas>
+  <div id="minimapViewport"></div>
+</div>
+
 <script src="res/main.js"></script>
 </body>
 </html>

@@ -6,6 +6,8 @@ namespace DvMod.RemoteDispatch
 {
     public static class PlayerData
     {
+        private const float PositionEpsilon = 1e-3f;
+
         private static World.Position previousPosition;
         private static float previousRotation;
 
@@ -30,7 +32,7 @@ namespace DvMod.RemoteDispatch
         private static bool ApproximatelyEquals(float f1, float f2)
         {
             var delta = f1 - f2;
-            return delta > -1e-3 && delta < 1e-3;
+            return delta > -PositionEpsilon && delta < PositionEpsilon;
         }
 
         public static JObject GetPlayerData()
