@@ -486,20 +486,69 @@ const tracksReady = fetch(new URL('/track', location))
 });
 
 /////////////////////
-// junctions — CTC triangle arrowhead design
+// junctions — triangle switch indicator
+//
+// The SVG contains ONLY the triangle and junction label.
+// No track lines are drawn inside the junction overlay — the real
+// track geometry from the server is already rendered by Leaflet polylines.
+//
+// The triangle computes its rotation from the actual track geometry:
+//   - Look up branch[0] and branch[1] track polylines
+//   - Find the nearest point on each polyline to the junction position
+//   - Compute the direction vector from junction toward each branch
+//   - Triangle points along the SELECTED branch direction
+//   - On toggle, it pivots from one direction to the other
+
+const TRI_LEN = 12;  // tip to base center
+const TRI_HW = 7;    // half-width of base
+const JUNCTION_EASE = t => 1 - Math.pow(1 - t, 3); // ease-out cubic
+const JUNCTION_DUR = 300;
 
 let junctions = [];
 const junctionsReady = tracksReady
 .then(_ => fetch(new URL('/junction', location)))
 .then(resp => resp.json())
-.then(allJunctionData =>
-  junctions = allJunctionData.map((data, index) => ({
-    marker: createJunctionMarker(data.position, index),
-    branches: data.branches,
-    selectedBranch: null,
-    animating: false,
-  }))
-);
+.then(allJunctionData => {
+  junctions = allJunctionData.map((data, index) => {
+    // Compute direction angles from junction position toward each branch track
+    const jPos = data.position; // [lat, lon]
+    const angles = data.branches.map(trackId => {
+      const poly = trackPolyLines.get(trackId);
+      if (!poly) return 0;
+      const pts = poly.getLatLngs();
+      // Find the point on this track closest to the junction, then get direction
+      let bestDist = Infinity, bestIdx = 0;
+      pts.forEach((p, i) => {
+        const d = Math.pow(p.lat - jPos[0], 2) + Math.pow(p.lng - jPos[1], 2);
+        if (d < bestDist) { bestDist = d; bestIdx = i; }
+      });
+      // Direction: from junction toward the NEXT point along the track (away from junction)
+      // Use the point 2 positions away from closest for a more stable angle
+      const dirIdx = Math.min(bestIdx + 2, pts.length - 1);
+      const dirPt = pts[dirIdx];
+      const dx = dirPt.lng - jPos[1];
+      const dy = dirPt.lat - jPos[0];
+      // atan2 in lat/lon space, convert to SVG rotation degrees
+      // SVG rotation: 0° = pointing right, 90° = pointing down
+      // But our triangle points RIGHT in local coords, so we need angle from +X axis
+      return Math.atan2(dy, dx) * 180 / Math.PI;
+    });
+
+    // Normalize angle difference for shortest rotation path
+    let diff = angles[1] - angles[0];
+    while (diff > 180) diff -= 360;
+    while (diff < -180) diff += 360;
+    const angle1Norm = angles[0] + diff;
+
+    return {
+      marker: createJunctionMarker(data.position, index, angles[0]),
+      branches: data.branches,
+      branchAngles: [angles[0], angle1Norm],
+      selectedBranch: null,
+      animating: false,
+    };
+  });
+});
 
 function toggleJunction(junctionId) {
   const junction = junctions[junctionId];
@@ -510,45 +559,24 @@ function toggleJunction(junctionId) {
   .catch(() => {});
 }
 
-// Triangle junction SVG — solid arrowhead at convergence point
-const jSize = 16;
-
-function createJunctionOverlay(junctionId) {
-  const s = jSize;
+function createJunctionOverlay(junctionId, initialAngleDeg) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('id', `J-${junctionId}`);
   svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-  svg.setAttribute('viewBox', `${-s*1.5} ${-s*1.5} ${s*3} ${s*3}`);
+  svg.setAttribute('viewBox', '-20 -20 40 40');
 
-  // Main rail line (straight through)
-  // Diverging rail line (angled)
-  // Triangle arrowhead at convergence
-  // Junction ID label
+  // Triangle only — no track lines. Points RIGHT in local coords.
+  // Rotated by the junction's transform to point along the selected branch.
   svg.innerHTML = `
-    <g class="junction-group" id="jg-${junctionId}">
-      <line class="j-main-rail" x1="0" y1="${s*1.2}" x2="0" y2="${-s*1.2}"
-            stroke="${TRACK_COLOR}" stroke-width="2.5" stroke-linecap="round"/>
-      <line class="j-diverge-rail" id="jdr-${junctionId}"
-            x1="0" y1="${s*0.4}" x2="${-s*0.8}" y2="${-s*1.2}"
-            stroke="${TRACK_COLOR_DIM}" stroke-width="2.5" stroke-linecap="round"/>
-      <polygon class="j-triangle" id="jt-${junctionId}"
-               points="0,${s*0.5} ${-s*0.45},${-s*0.15} ${s*0.45},${-s*0.15}"
-               fill="${TRACK_COLOR}" stroke="none"/>
-      <text class="j-label" x="${s*0.7}" y="${s*0.15}" text-anchor="start"
-            font-size="7" font-family="Consolas,Monaco,monospace" font-weight="600"
-            fill="#888">${junctionId}</text>
-    </g>`;
+    <g id="jg-${junctionId}" transform="rotate(${initialAngleDeg || 0})">
+      <polygon id="jt-${junctionId}"
+               points="${TRI_LEN},0 ${-TRI_LEN*0.25},${-TRI_HW} ${-TRI_LEN*0.25},${TRI_HW}"
+               fill="#c0c0c0" stroke="none" style="cursor:pointer"/>
+    </g>
+    <text x="0" y="16" text-anchor="middle"
+          font-size="7" font-family="Consolas,Monaco,monospace" font-weight="600"
+          fill="#777">${junctionId}</text>`;
   return svg;
-}
-
-function getDivergeEndpoint(branch) {
-  // Branch 0 = diverge left, Branch 1 = diverge right
-  const angle = branch === 0 ? -40 : branch === 1 ? 40 : 0;
-  const rad = angle * Math.PI / 180;
-  return {
-    x: Math.sin(rad) * jSize * 1.2,
-    y: -jSize * 1.2,
-  };
 }
 
 function animateJunctionSwitch(junctionId, newBranch) {
@@ -556,60 +584,30 @@ function animateJunctionSwitch(junctionId, newBranch) {
   const oldBranch = junction.selectedBranch;
   junction.animating = true;
 
-  const divergeRail = document.getElementById(`jdr-${junctionId}`);
-  const triangle = document.getElementById(`jt-${junctionId}`);
-  if (!divergeRail) { junction.animating = false; junction.selectedBranch = newBranch; return; }
+  const triGroup = document.getElementById(`jg-${junctionId}`);
+  if (!triGroup) { junction.animating = false; junction.selectedBranch = newBranch; return; }
 
-  const startEnd = getDivergeEndpoint(oldBranch ?? newBranch);
-  const targetEnd = getDivergeEndpoint(newBranch);
+  const fromAngle = junction.branchAngles[oldBranch ?? 0];
+  const toAngle = junction.branchAngles[newBranch];
+  const t0 = performance.now();
 
-  const duration = 350;
-  const startTime = performance.now();
-
-  // Flash brightness — momentary white
-  if (triangle) triangle.setAttribute('fill', '#ffffff');
-  divergeRail.setAttribute('stroke', '#ffffff');
+  // Update track colors immediately (CSS transition handles smooth fade)
+  updateJunctionTrackStyles(junctionId, newBranch);
 
   function frame(now) {
-    const elapsed = now - startTime;
-    const t = Math.min(elapsed / duration, 1);
-    // Spring easing with subtle overshoot
-    const spring = 1 - Math.pow(1 - t, 3) * Math.cos(t * Math.PI * 1.1);
-    const eased = Math.min(spring, 1.03);
+    const raw = Math.min((now - t0) / JUNCTION_DUR, 1);
+    const e = JUNCTION_EASE(raw);
+    const angle = fromAngle + (toAngle - fromAngle) * e;
+    triGroup.setAttribute('transform', `rotate(${angle})`);
 
-    const cx = startEnd.x + (targetEnd.x - startEnd.x) * eased;
-    const cy = startEnd.y + (targetEnd.y - startEnd.y) * eased;
-    divergeRail.setAttribute('x2', cx);
-    divergeRail.setAttribute('y2', cy);
-
-    // Fade brightness back during animation
-    if (t > 0.3) {
-      const fade = Math.min((t - 0.3) / 0.4, 1);
-      const c = Math.round(200 + (200 - 200) * fade); // stays at #c8c8c8
-      const grey = `rgb(${Math.round(255 - (255 - 200) * fade)},${Math.round(255 - (255 - 200) * fade)},${Math.round(255 - (255 - 200) * fade)})`;
-      if (triangle) triangle.setAttribute('fill', grey);
-      divergeRail.setAttribute('stroke', grey);
-    }
-
-    if (t < 1) {
+    if (raw < 1) {
       requestAnimationFrame(frame);
     } else {
-      // Final position
-      divergeRail.setAttribute('x2', targetEnd.x);
-      divergeRail.setAttribute('y2', targetEnd.y);
+      triGroup.setAttribute('transform', `rotate(${toAngle})`);
       junction.selectedBranch = newBranch;
-
-      // Set final colors
-      if (triangle) triangle.setAttribute('fill', TRACK_COLOR);
-      divergeRail.setAttribute('stroke', TRACK_COLOR);
-
-      // Update track polyline styles
-      updateJunctionTrackStyles(junctionId, newBranch);
-
-      setTimeout(() => { junction.animating = false; }, 50);
+      junction.animating = false;
     }
   }
-
   requestAnimationFrame(frame);
 }
 
@@ -617,7 +615,6 @@ function updateJunctionTrackStyles(junctionId, selectedBranch) {
   const junction = junctions[junctionId];
   const selectedTrackId = junction.branches[selectedBranch];
   const unselectedTrackId = junction.branches[1 - selectedBranch];
-  // CTC style: active branch = full white-grey, inactive = dimmed
   if (selectedTrackId && trackPolyLines.has(selectedTrackId))
     trackPolyLines.get(selectedTrackId).setStyle({ color: TRACK_COLOR, dashArray: null });
   if (unselectedTrackId && trackPolyLines.has(unselectedTrackId))
@@ -625,25 +622,21 @@ function updateJunctionTrackStyles(junctionId, selectedBranch) {
 }
 
 function setJunctionVisual(junctionId, branch) {
-  const divergeRail = document.getElementById(`jdr-${junctionId}`);
-  if (!divergeRail) return;
-  const end = getDivergeEndpoint(branch);
-  divergeRail.setAttribute('x2', end.x);
-  divergeRail.setAttribute('y2', end.y);
-  divergeRail.setAttribute('stroke', TRACK_COLOR);
-  const triangle = document.getElementById(`jt-${junctionId}`);
-  if (triangle) triangle.setAttribute('fill', TRACK_COLOR);
+  const junction = junctions[junctionId];
+  const triGroup = document.getElementById(`jg-${junctionId}`);
+  if (!triGroup || !junction) return;
+  triGroup.setAttribute('transform', `rotate(${junction.branchAngles[branch]})`);
   updateJunctionTrackStyles(junctionId, branch);
 }
 
 function getJunctionOverlayBounds(position) {
   const size = metersToDegrees * 5;
-  return [[position[0] - size, position[1] - size/2], [position[0] + size, position[1] + size/2]];
+  return [[position[0] - size, position[1] - size], [position[0] + size, position[1] + size]];
 }
 
-function createJunctionMarker(p, junctionId) {
+function createJunctionMarker(p, junctionId, initialAngle) {
   return L.svgOverlay(
-    createJunctionOverlay(junctionId),
+    createJunctionOverlay(junctionId, initialAngle),
     getJunctionOverlayBounds(p),
     { interactive: true, renderer: canvasRenderer })
     .addEventListener('click', () => toggleJunction(junctionId))
