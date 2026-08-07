@@ -3,375 +3,285 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Farm (FM) — Raw vs Schematic</title>
+<title>Farm (FM) — Faithful Track Geometry</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #161616; color: #999; font-family: 'Consolas','Monaco',monospace; overflow: auto; }
-  h1 { text-align: center; font-size: 13px; color: #666; letter-spacing: 2px; text-transform: uppercase; padding: 12px 0 4px; }
-  .sub { text-align: center; font-size: 10px; color: #444; margin-bottom: 16px; }
-  .panels { display: flex; gap: 8px; padding: 0 8px 8px; height: calc(100vh - 60px); }
-  .panel { flex: 1; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 3px; position: relative; overflow: hidden; }
-  .panel-title { position: absolute; top: 6px; left: 10px; font-size: 10px; color: #555; letter-spacing: 1px; text-transform: uppercase; z-index: 2; }
-  svg { width: 100%; height: 100%; }
-  .trk { stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
-  .jdot { r: 3; }
-  .jlbl { font-size: 7px; fill: #666; }
-  .tlbl { font-size: 8px; fill: #777; font-weight: 700; }
-  .exit-lbl { font-size: 7px; fill: #555; }
+  body { background: #131313; overflow: hidden; height: 100vh; width: 100vw; }
+  svg { width: 100%; height: 100%; display: block; cursor: grab; }
+  svg:active { cursor: grabbing; }
+  .title {
+    position: fixed; top: 0; left: 0; right: 0; height: 24px;
+    background: #0a0a0a; border-bottom: 1px solid #1e1e1e;
+    display: flex; align-items: center; padding: 0 16px;
+    font: 10px 'Consolas','Monaco',monospace; color: #555;
+    letter-spacing: 1px; text-transform: uppercase; z-index: 10;
+  }
+  #info {
+    position: fixed; bottom: 0; left: 0; right: 0; height: 24px;
+    background: #0a0a0a; border-top: 1px solid #1e1e1e;
+    display: flex; align-items: center; padding: 0 16px;
+    font: 10px 'Consolas','Monaco',monospace; color: #555; gap: 16px; z-index: 10;
+  }
+  #info .v { color: #999; font-weight: 700; }
 </style>
 </head>
 <body>
-
-<h1>Farm (FM) — Raw Geometry vs Generated Schematic</h1>
-<p class="sub">Left: actual game coordinates · Right: schematic layout engine output · Same graph, same connectivity</p>
-
-<div class="panels">
-  <div class="panel">
-    <div class="panel-title">Raw Geometry (from track_data.json)</div>
-    <svg id="raw" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
-      <rect width="800" height="600" fill="#1a1a1a"/>
-    </svg>
-  </div>
-  <div class="panel">
-    <div class="panel-title">Generated Schematic (same topology)</div>
-    <svg id="sch" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
-      <rect width="800" height="600" fill="#161616"/>
-    </svg>
-  </div>
+<div class="title">Farm (FM) — Faithful Geometry · Click turnout triangles to toggle</div>
+<svg id="map" xmlns="http://www.w3.org/2000/svg"></svg>
+<div id="info">
+  <span>TURNOUTS: <span class="v" id="nTurnouts">0</span></span>
+  <span id="lastAction" class="v"></span>
 </div>
 
 <script>
-// ============================================================
-// FARM (FM) GRAPH DATA
-// Extracted from track_data.json — topology only
-// ============================================================
+// Load pre-computed SVG data
+const svgData = {"paths": [{"d": "M 427.8,506.9 C 426.6,508.7 425.5,510.4 424.3,512.2", "name": "[Y]_[FM]_[--]", "yard": true}, {"d": "M 617.6,217.0 C 557.8,308.3 498.0,399.7 438.2,490.9", "name": "[Y]_[FM]_[--]", "yard": true}, {"d": "M 631.6,195.7 C 630.4,197.5 629.2,199.2 628.1,201.0", "name": "[Y]_[FM]_[--]", "yard": true}, {"d": "M 584.1,253.8 C 577.6,261.3 571.5,269.5 565.6,278.3 C 564.2,280.5 562.7,282.8 561.3,285.0 C 546.1,308.3 530.9,331.3 515.7,354.5 C 500.5,377.7 485.4,401.0 470.2,424.1 C 468.7,426.3 467.3,428.5 465.8,430.7 C 460.0,439.7 454.6,449.2 449.5,459.3", "name": "[Y]_[FM]_[B-07-P]", "yard": true}, {"d": "M 436.5,485.1 C 437.8,482.6 439.0,480.0 440.3,477.5", "name": "[Y]_[FM]_[--]", "yard": true}, {"d": "M 600.5,234.7 C 598.9,236.6 597.3,238.5 595.7,240.3", "name": "[Y]_[FM]_[--]", "yard": true}, {"d": "M 584.7,255.3 C 539.9,323.7 495.1,392.1 450.2,460.5", "name": "[Y]_[FM]_[B-06-O]", "yard": true}, {"d": "M 423.6,510.8 C 424.9,508.3 426.1,505.8 427.4,503.3", "name": "[Y]_[FM]_[--]", "yard": true}, {"d": "M 616.9,215.6 C 615.3,217.5 613.7,219.3 612.1,221.2", "name": "[Y]_[FM]_[--]", "yard": true}, {"d": "M 601.1,236.3 C 546.5,319.6 491.9,402.9 437.4,486.3", "name": "[Y]_[FM]_[B-05-O]", "yard": true}, {"d": "M 606.4,248.7 C 601.3,258.8 595.8,268.3 590.1,277.3 C 588.6,279.5 587.1,281.7 585.7,284.0 C 570.5,307.0 555.3,330.3 540.2,353.5 C 525.0,376.7 509.7,399.7 494.6,423.0 C 493.1,425.2 491.7,427.5 490.2,429.7 C 484.4,438.5 478.2,446.7 471.8,454.2", "name": "[Y]_[FM]_[B-01-S]", "yard": true}, {"d": "M 455.4,473.3 C 456.9,471.4 458.6,469.5 460.2,467.7", "name": "[Y]_[FM]_[--]", "yard": true}, {"d": "M 619.3,222.8 C 618.1,225.5 616.8,228.0 615.5,230.5", "name": "[Y]_[FM]_[--]", "yard": true}, {"d": "M 605.6,247.5 C 560.8,315.9 516.0,384.3 471.2,452.7", "name": "[Y]_[FM]_[B-02-I]", "yard": true}, {"d": "M 438.9,492.3 C 440.6,490.4 442.1,488.6 443.8,486.7", "name": "[Y]_[FM]_[--]", "yard": true}, {"d": "M 632.3,197.1 C 631.0,199.6 629.8,202.1 628.5,204.6", "name": "[Y]_[FM]_[--]", "yard": true}, {"d": "M 618.5,221.6 C 564.0,305.1 509.3,388.4 454.8,471.7", "name": "[Y]_[FM]_[B-03-S]", "yard": true}, {"d": "M 137.1,50.4 C 136.1,91.2 141.3,131.9 149.3,170.3 C 157.4,208.7 168.2,245.3 178.9,281.9 C 196.6,342.8 215.1,406.6 247.2,446.4 C 263.3,466.4 282.7,479.4 302.5,479.6 C 312.5,479.7 322.4,476.5 331.5,469.9 C 340.7,463.2 348.9,453.1 355.4,440.1 C 366.5,417.5 371.3,387.9 376.5,359.7 C 379.1,345.5 381.9,331.4 385.7,318.2 C 389.6,304.9 394.5,292.5 401.0,282.8 C 411.7,267.0 425.6,259.5 439.5,255.4 C 453.4,251.4 467.5,250.5 481.2,245.7 C 520.5,232.2 553.7,189.4 586.7,150.7 C 613.7,119.0 642.3,88.6 674.4,78.1 C 715.3,64.8 756.9,85.0 797.8,97.4", "name": "Road 86", "yard": false}, {"d": "M 671.7,179.2 C 653.8,209.0 636.7,240.6 622.0,275.2", "name": "[#] Road 77", "yard": false}, {"d": "M 50.2,749.9 C 65.4,746.7 80.7,743.7 95.9,739.7 C 180.0,717.5 260.5,665.6 337.7,604.4", "name": "Road 38", "yard": false}, {"d": "M 437.6,547.9 C 419.9,558.4 402.1,567.4 384.4,577.5", "name": "[#] Road 28", "yard": false}, {"d": "M 384.0,575.7 C 399.1,563.1 415.1,552.9 428.8,536.4 C 439.0,524.0 447.8,508.3 456.9,493.5 C 467.5,476.3 478.7,460.2 489.6,443.8 C 501.9,425.5 514.0,406.8 526.2,388.3 C 537.0,371.7 547.8,355.2 558.7,338.7 C 595.1,283.2 631.7,227.6 671.0,177.9", "name": "[Y]_[FM]_[A-03-L]", "yard": true}, {"d": "M 371.1,584.9 C 364.4,588.7 357.6,592.4 350.9,595.9", "name": "[#] Road 27", "yard": false}, {"d": "M 450.8,540.1 C 462.5,533.1 474.0,525.0 484.7,514.5 C 496.3,503.2 506.8,489.3 517.0,474.8 C 535.0,449.2 552.1,421.8 569.4,394.8 C 576.1,384.5 582.8,374.1 588.5,362.1 C 598.3,341.3 604.6,316.2 613.7,294.5", "name": "[Y]_[FM]_[A-01-L]", "yard": true}, {"d": "M 450.4,538.3 C 467.2,523.8 481.3,501.8 495.3,480.4 C 503.9,467.4 512.4,454.5 520.9,441.6 C 527.6,431.5 534.2,421.5 540.8,411.4 C 544.5,405.5 548.4,399.6 552.2,393.8 C 560.0,382.0 567.9,370.3 575.5,358.1 C 588.5,337.4 600.6,315.3 612.9,293.4", "name": "[Y]_[FM]_[A-02-S]", "yard": true}, {"d": "M 681.8,162.6 C 698.6,135.0 718.9,113.1 741.4,102.9", "name": "[#] Road 21", "yard": false}, {"d": "M 755.1,98.2 C 769.3,95.3 783.6,98.2 797.8,99.2", "name": "Road 20", "yard": false}, {"d": "M 811.8,100.2 C 825.9,101.2 840.1,103.3 854.2,106.0 C 885.0,111.8 915.7,120.3 946.6,125.6 C 950.6,126.3 954.5,127.0 958.5,127.6 C 1013.3,136.6 1068.1,148.3 1123.1,153.4 C 1132.0,154.2 1141.0,154.8 1149.8,156.2", "name": "Road 15b", "yard": false}, {"d": "M 642.0,179.7 C 642.5,179.1 642.9,178.4 643.3,177.7 C 670.6,136.3 705.1,108.8 741.3,101.1", "name": "[#] Road 21", "yard": false}, {"d": "M 413.9,528.2 C 413.4,528.8 413.0,529.5 412.5,530.2 C 394.4,557.7 372.4,576.8 350.5,594.3", "name": "[#] Road 27", "yard": false}, {"d": "M 440.3,477.5 C 441.5,475.2 448.3,461.6 449.5,459.3", "name": "[track through]", "yard": false}, {"d": "M 440.3,477.5 C 442.6,473.0 445.5,467.8 450.2,460.5", "name": "[track diverging]", "yard": false}, {"d": "M 595.7,240.3 C 594.2,242.0 585.5,252.1 584.1,253.8", "name": "[track through]", "yard": false}, {"d": "M 595.7,240.3 C 592.8,243.7 589.4,248.1 584.7,255.3", "name": "[track diverging]", "yard": false}, {"d": "M 427.4,503.3 C 428.6,501.0 435.4,487.4 436.5,485.1", "name": "[track through]", "yard": false}, {"d": "M 427.4,503.3 C 429.7,498.7 432.6,493.5 437.4,486.3", "name": "[track diverging]", "yard": false}, {"d": "M 612.1,221.2 C 610.6,222.9 602.0,233.1 600.5,234.7", "name": "[track through]", "yard": false}, {"d": "M 612.1,221.2 C 609.2,224.6 605.9,229.0 601.1,236.3", "name": "[track diverging]", "yard": false}, {"d": "M 413.9,528.2 C 415.2,526.2 423.0,514.2 424.3,512.2", "name": "[track through]", "yard": false}, {"d": "M 413.9,528.2 C 416.4,524.2 419.5,519.1 423.6,510.8", "name": "[track diverging]", "yard": false}, {"d": "M 628.1,201.0 C 626.8,203.0 618.9,215.0 617.6,217.0", "name": "[track through]", "yard": false}, {"d": "M 628.1,201.0 C 625.4,205.0 622.2,209.5 616.9,215.6", "name": "[track diverging]", "yard": false}, {"d": "M 460.2,467.7 C 461.7,466.0 470.3,455.9 471.8,454.2", "name": "[track through]", "yard": false}, {"d": "M 460.2,467.7 C 463.1,464.3 466.4,459.9 471.2,452.7", "name": "[track diverging]", "yard": false}, {"d": "M 615.5,230.5 C 614.4,232.8 607.5,246.4 606.4,248.7", "name": "[track through]", "yard": false}, {"d": "M 615.5,230.5 C 613.3,235.0 610.3,240.2 605.6,247.5", "name": "[track diverging]", "yard": false}, {"d": "M 443.8,486.7 C 445.2,485.0 453.9,474.9 455.4,473.3", "name": "[track through]", "yard": false}, {"d": "M 443.8,486.7 C 446.7,483.3 450.0,479.0 454.8,471.7", "name": "[track diverging]", "yard": false}, {"d": "M 628.5,204.6 C 627.3,206.9 620.5,220.6 619.3,222.8", "name": "[track through]", "yard": false}, {"d": "M 628.5,204.6 C 626.2,209.2 623.3,214.4 618.5,221.6", "name": "[track diverging]", "yard": false}, {"d": "M 427.8,506.9 C 429.1,504.9 436.9,492.9 438.2,490.9", "name": "[track through]", "yard": false}, {"d": "M 427.8,506.9 C 430.4,502.9 433.7,498.4 438.9,492.3", "name": "[track diverging]", "yard": false}, {"d": "M 642.0,179.7 C 640.7,181.7 632.8,193.7 631.6,195.7", "name": "[track through]", "yard": false}, {"d": "M 642.0,179.7 C 639.4,183.7 636.4,188.8 632.3,197.1", "name": "[track diverging]", "yard": false}, {"d": "M 437.6,547.9 C 439.2,546.9 449.1,541.0 450.8,540.1", "name": "[track through]", "yard": false}, {"d": "M 437.6,547.9 C 440.9,546.0 444.8,543.2 450.4,538.3", "name": "[track diverging]", "yard": false}, {"d": "M 371.1,584.9 C 372.7,584.0 382.7,578.4 384.4,577.5", "name": "[track through]", "yard": false}, {"d": "M 371.1,584.9 C 374.4,583.1 378.3,580.4 384.0,575.7", "name": "[track diverging]", "yard": false}, {"d": "M 337.7,604.4 C 339.3,603.1 348.9,595.5 350.5,594.3", "name": "[track through]", "yard": false}, {"d": "M 337.7,604.4 C 340.9,601.8 344.8,599.2 350.9,595.9", "name": "[track diverging]", "yard": false}, {"d": "M 622.0,275.2 C 621.0,277.6 614.8,292.1 613.7,294.5", "name": "[track through]", "yard": false}, {"d": "M 622.0,275.2 C 620.0,280.0 617.3,285.6 612.9,293.4", "name": "[track diverging]", "yard": false}, {"d": "M 681.8,162.6 C 680.5,164.7 673.0,177.2 671.7,179.2", "name": "[track through]", "yard": false}, {"d": "M 681.8,162.6 C 679.3,166.8 676.1,171.5 671.0,177.9", "name": "[track diverging]", "yard": false}, {"d": "M 755.1,98.2 C 753.4,98.5 742.9,100.7 741.3,101.1", "name": "[track through]", "yard": false}, {"d": "M 755.1,98.2 C 751.6,98.9 747.5,100.2 741.4,102.9", "name": "[track diverging]", "yard": false}, {"d": "M 811.8,100.2 C 810.0,100.0 799.5,99.3 797.8,99.2", "name": "[track through]", "yard": false}, {"d": "M 811.8,100.2 C 808.3,99.9 804.1,99.2 797.8,97.4", "name": "[track diverging]", "yard": false}], "junctions": [{"id": 151, "x": 440.33010120277646, "y": 477.522149185482, "deg": 2, "links": [153, 152]}, {"id": 152, "x": 595.6578180469454, "y": 240.2543583881116, "deg": 2, "links": [154, 151]}, {"id": 153, "x": 427.39098182588896, "y": 503.32952272077796, "deg": 3, "links": [155, 151, 154]}, {"id": 154, "x": 612.0939967148837, "y": 221.24892826521932, "deg": 3, "links": [156, 152, 153]}, {"id": 155, "x": 413.8690192338258, "y": 528.2366390397259, "deg": 3, "links": [347, 153, 161]}, {"id": 156, "x": 628.0639008106817, "y": 201.04315518719625, "deg": 3, "links": [162, 154, 161]}, {"id": 157, "x": 460.20505484024767, "y": 467.71934838525317, "deg": 2, "links": [159, 158]}, {"id": 158, "x": 615.5327716844166, "y": 230.4515575878828, "deg": 2, "links": [160, 157]}, {"id": 159, "x": 443.7688761723095, "y": 486.72477850814545, "deg": 3, "links": [161, 157, 160]}, {"id": 160, "x": 628.4718910613047, "y": 204.64418405258675, "deg": 3, "links": [162, 158, 159]}, {"id": 161, "x": 427.79897207651146, "y": 506.93055158616755, "deg": 3, "links": [155, 159, 156]}, {"id": 162, "x": 641.9938536533674, "y": 179.73706773363892, "deg": 3, "links": [350, 160, 156]}, {"id": 398, "x": 437.5907380914536, "y": 547.9422692197771, "deg": 2, "links": [346, 348]}, {"id": 399, "x": 371.08832723997233, "y": 584.8528150900263, "deg": 3, "links": [347, 345, 349]}, {"id": 400, "x": 337.7496953319557, "y": 604.3583881108895, "deg": 3, "links": [341, 155, 346]}, {"id": 401, "x": 622.0023313728608, "y": 275.16433266647647, "deg": 2, "links": [349, 345]}, {"id": 402, "x": 681.802045249828, "y": 162.63218062303542, "deg": 3, "links": [350, 348, 346]}, {"id": 403, "x": 755.1237217188575, "y": 98.21377536439059, "deg": 3, "links": [351, 349, 162]}], "svgW": 1200, "svgH": 800};
 
-// Junctions: id → {x, z, links}
-// x,z are raw game coordinates (used for the left panel)
-const junctions = {
-  151: { x: 5872, z: 6611, links: [153, 152] },
-  152: { x: 6138, z: 6848, links: [154, 151] },
-  153: { x: 5850, z: 6585, links: [155, 151, 154] },
-  154: { x: 6166, z: 6867, links: [156, 152, 153] },
-  155: { x: 5826, z: 6560, links: [347, 153, 161] },
-  156: { x: 6194, z: 6887, links: [162, 154, 161] },
-  157: { x: 5906, z: 6621, links: [159, 158] },
-  158: { x: 6172, z: 6858, links: [160, 157] },
-  159: { x: 5878, z: 6601, links: [161, 157, 160] },
-  160: { x: 6195, z: 6883, links: [162, 158, 159] },
-  161: { x: 5850, z: 6581, links: [155, 159, 156] },
-  162: { x: 6218, z: 6908, links: [350, 160, 156] },
-  398: { x: 5867, z: 6540, links: [346, 348] },
-  399: { x: 5753, z: 6503, links: [347, 345, 349] },
-  400: { x: 5696, z: 6484, links: [341, 155, 346] },
-  401: { x: 6184, z: 6813, links: [349, 345] },
-  402: { x: 6286, z: 6925, links: [350, 348, 346] },
-  403: { x: 6412, z: 6990, links: [351, 349, 162] },
-};
+const svg = document.getElementById('map');
+const svgW = svgData.svgW;
+const svgH = svgData.svgH;
+svg.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`);
 
-// Named tracks: name → [startJunction, endJunction]
-const namedTracks = {
-  'A-01-L': [398, 401],
-  'A-02-S': [398, 401],
-  'A-03-L': [399, 402],
-  'B-01-S': [152, 157],
-  'B-02-I': [152, 157],
-  'B-03-S': [158, 157],
-  'B-05-O': [152, 151],
-  'B-06-O': [152, 157],
-  'B-07-P': [152, 157],
-};
-
-// Edges: pairs of connected junctions (from linkedJunctions)
-const edges = new Set();
-const fmIds = new Set(Object.keys(junctions).map(Number));
-for (const [id, j] of Object.entries(junctions)) {
-  for (const link of j.links) {
-    const a = Math.min(Number(id), link);
-    const b = Math.max(Number(id), link);
-    edges.add(`${a}-${b}`);
-  }
-}
-
-// External junctions (referenced but not in FM)
-const externalIds = new Set();
-for (const j of Object.values(junctions)) {
-  for (const l of j.links) {
-    if (!fmIds.has(l)) externalIds.add(l);
-  }
-}
+const ACTIVE = '#b0b0b0';
+const INACTIVE = '#2a2a2a';
+const TURNOUT_COLOR = '#c8c8c8';
+const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
 
 // ============================================================
-// LEFT PANEL: Raw geometry rendering
+// STEP 1: Render all tracks using smooth bezier curves
 // ============================================================
 
-const rawSvg = document.getElementById('raw');
+const trackElements = [];
 
-// Compute bounding box of all junction positions
-const allX = Object.values(junctions).map(j => j.x);
-const allZ = Object.values(junctions).map(j => j.z);
-const minX = Math.min(...allX) - 80;
-const maxX = Math.max(...allX) + 80;
-const minZ = Math.min(...allZ) - 80;
-const maxZ = Math.max(...allZ) + 80;
-const rangeX = maxX - minX;
-const rangeZ = maxZ - minZ;
-
-function rawToSvg(x, z) {
-  const pad = 60;
-  const sx = pad + (x - minX) / rangeX * (800 - 2 * pad);
-  const sy = pad + (z - minZ) / rangeZ * (600 - 2 * pad);
-  return [sx, sy];
-}
-
-// Draw edges
-for (const edge of edges) {
-  const [a, b] = edge.split('-').map(Number);
-  const ja = junctions[a];
-  const jb = junctions[b];
-  if (!ja || !jb) continue; // skip edges to external junctions
-  const [x1, y1] = rawToSvg(ja.x, ja.z);
-  const [x2, y2] = rawToSvg(jb.x, jb.z);
-  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-  line.setAttribute('x1', x1); line.setAttribute('y1', y1);
-  line.setAttribute('x2', x2); line.setAttribute('y2', y2);
-  line.setAttribute('stroke', '#666');
-  line.classList.add('trk');
-  rawSvg.appendChild(line);
-}
-
-// Draw junctions
-for (const [id, j] of Object.entries(junctions)) {
-  const [cx, cy] = rawToSvg(j.x, j.z);
-  const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-  c.setAttribute('cx', cx); c.setAttribute('cy', cy);
-  c.setAttribute('r', j.links.length > 2 ? 4 : 3);
-  c.setAttribute('fill', j.links.length > 2 ? '#c0c0c0' : '#888');
-  c.classList.add('jdot');
-  rawSvg.appendChild(c);
-
-  const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  t.setAttribute('x', cx + 6); t.setAttribute('y', cy - 4);
-  t.classList.add('jlbl');
-  t.textContent = id;
-  rawSvg.appendChild(t);
-}
-
-// ============================================================
-// RIGHT PANEL: Schematic layout engine
-// ============================================================
-//
-// The algorithm:
-// 1. Identify the MAIN THROUGH-ROUTE (longest path between external exits)
-// 2. Place it as a horizontal line
-// 3. Identify PARALLEL YARD TRACKS
-// 4. Place them as evenly spaced horizontal lines above/below the main
-// 5. Identify BRANCH LOOPS and lay them out symmetrically
-// 6. All angles: 0°, 45°, 90° only
-//
-// For Farm:
-// - Main through-route: J-400 → J-155 → J-161 → J-156 → J-162 → J-403
-//   (this is the path from external J-341 to external J-351)
-// - Upper yard tracks (B-05 to B-07): fan off the main between J-151..J-154
-// - Lower yard tracks (B-01 to B-03): fan off the main between J-157..J-158
-// - Bottom loop: J-399 → J-398 → J-401 → J-402 (A tracks)
-
-const schSvg = document.getElementById('sch');
-const S = {}; // schematic positions: junctionId → [x, y]
-
-// Schematic layout constants
-const pad = 60;
-const W = 800 - 2 * pad;
-const H = 600 - 2 * pad;
-const mainY = 300;  // main line y
-const trackGap = 28; // vertical gap between parallel tracks
-
-// === STEP 1: Place main through-route horizontally ===
-// Main route: 400 → 155 → 161 → 159 → 157  (lower ladder)
-//                         └→ 153 → 151 → 152 → 154 → 156  (upper ladder)
-//                                                    └→ 160 → 158 (lower right)
-//                                        └→ 162 → 403
-
-// Actually from the graph, the main through path is:
-// ENTRY(341) → 400 → 155 → 161 → 156 → 162 → 403 → EXIT(351)
-// This is the main line passing through the station
-
-const mainRoute = [400, 155, 161, 156, 162, 403];
-const mainSpacing = W / (mainRoute.length + 1);
-
-mainRoute.forEach((id, i) => {
-  S[id] = [pad + mainSpacing * (i + 1), mainY];
+svgData.paths.forEach((t, i) => {
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', t.d);
+  path.setAttribute('stroke', ACTIVE);
+  path.setAttribute('stroke-width', t.yard ? '2.5' : '2');
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke-linecap', 'round');
+  path.setAttribute('stroke-linejoin', 'round');
+  path.style.transition = 'stroke 250ms ease';
+  path.dataset.name = t.name;
+  path.dataset.index = i;
+  svg.appendChild(path);
+  trackElements.push(path);
 });
 
-// === STEP 2: Place upper yard ladder (B tracks) ===
-// The upper ladder runs through: 153, 151, 152, 154
-// These are turnouts that fan tracks above the main line
-// 153 links to 155 (on main) and 151 and 154
-// 154 links to 156 (on main) and 152 and 153
+// ============================================================
+// STEP 2: Build turnout data
+// Only junctions with degree >= 3 are real turnouts.
+// Each turnout has two "branches" — the tracks that diverge.
+// The dispatcher selects one branch; the other dims.
+// ============================================================
 
-// Place the upper ladder junctions at the same Y as main but offset for turnouts
-// 153 is between 155 and 161 on the main, slightly above
-// 151 is a pass-through between 153 and 152
-// 152 is a pass-through between 151 and 154
-// 154 is between 156 and ... on the main, slightly above
+// For each turnout, identify which tracks connect through it
+// A turnout at junction J splits traffic: one link is the "approach",
+// the other two are the "branches" the dispatcher chooses between.
+// For now, we use links[1] and links[2] as the two selectable branches
+// (links[0] is typically the approach/through direction).
 
-const upperY = mainY; // Same y-level as main (they ARE on the main line, they're the turnouts)
-// Actually 153 and 154 are turnouts ON the main line
-// 151 and 152 are pass-throughs between B-track entry pairs
+const turnouts = [];
+const junctionMap = {};
+svgData.junctions.forEach(j => { junctionMap[j.id] = j; });
 
-// Let's space them between J-155 and J-156 on the main line
-const x155 = S[155][0];
-const x156 = S[156][0];
-const yardWidth = x156 - x155;
-
-// Upper turnout junctions (left side of yard)
-S[153] = [x155 + yardWidth * 0.12, mainY];
-S[159] = [x155 + yardWidth * 0.20, mainY];
-S[151] = [x155 + yardWidth * 0.28, mainY];
-S[157] = [x155 + yardWidth * 0.36, mainY];
-
-// Upper turnout junctions (right side of yard)
-S[158] = [x156 - yardWidth * 0.36, mainY];
-S[152] = [x156 - yardWidth * 0.28, mainY];
-S[160] = [x156 - yardWidth * 0.20, mainY];
-S[154] = [x156 - yardWidth * 0.12, mainY];
-
-// === STEP 3: Place lower loop (A tracks) ===
-// J-399 → J-398 → J-401 → J-402
-// This is a loop below the main line
-// 399 and 400 are near the left entry, 402 and 403 near the right exit
-const loopY = mainY + 120;
-S[399] = [S[400][0] - 30, mainY + 45];
-S[398] = [S[400][0] + 40, loopY];
-S[401] = [S[403][0] - 40, loopY];
-S[402] = [S[403][0] + 30, mainY + 45];
-
-// === STEP 4: Render schematic ===
-
-// Draw function
-function drawLine(svg, x1, y1, x2, y2, color, width) {
-  const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-  l.setAttribute('x1', x1); l.setAttribute('y1', y1);
-  l.setAttribute('x2', x2); l.setAttribute('y2', y2);
-  l.setAttribute('stroke', color || '#888');
-  l.setAttribute('stroke-width', width || 2);
-  l.setAttribute('stroke-linecap', 'round');
-  l.setAttribute('fill', 'none');
-  svg.appendChild(l);
-}
-
-function drawDash(svg, x1, y1, x2, y2) {
-  const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-  l.setAttribute('x1', x1); l.setAttribute('y1', y1);
-  l.setAttribute('x2', x2); l.setAttribute('y2', y2);
-  l.setAttribute('stroke', '#555');
-  l.setAttribute('stroke-width', 2);
-  l.setAttribute('stroke-linecap', 'round');
-  l.setAttribute('stroke-dasharray', '6 4');
-  l.setAttribute('fill', 'none');
-  svg.appendChild(l);
-}
-
-function drawLabel(svg, x, y, text, cls) {
-  const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  t.setAttribute('x', x); t.setAttribute('y', y);
-  t.setAttribute('text-anchor', 'middle');
-  t.classList.add(cls || 'tlbl');
-  t.textContent = text;
-  svg.appendChild(t);
-}
-
-// --- Main line ---
-drawDash(schSvg, pad - 30, mainY, S[400][0], mainY);     // entry from left
-drawLine(schSvg, S[400][0], mainY, S[403][0], mainY, '#b0b0b0', 3); // main through
-drawDash(schSvg, S[403][0], mainY, pad + W + 30, mainY);  // exit right
-
-// --- Upper yard tracks (B tracks) ---
-// B-07-P: topmost, from J-153 area to J-154 area
-const yardTracks = [
-  { name: 'B-07-P', offset: -3 },
-  { name: 'B-06-O', offset: -2 },
-  { name: 'B-05-O', offset: -1 },
-  // main line (offset 0)
-  { name: 'B-03-S', offset: 1 },
-  { name: 'B-02-I', offset: 2 },
-  { name: 'B-01-S', offset: 3 },
-];
-
-const yardLeftX = S[153][0];
-const yardRightX = S[154][0];
-const ladderAngleX = 20; // horizontal run before parallel section
-
-yardTracks.forEach(yt => {
-  const y = mainY + yt.offset * trackGap;
-  const entryX = yardLeftX + Math.abs(yt.offset) * ladderAngleX;
-  const exitX = yardRightX - Math.abs(yt.offset) * ladderAngleX;
-
-  // Left diagonal entry
-  drawLine(schSvg, yardLeftX, mainY, entryX, y, '#777', 2);
-  // Parallel section
-  drawLine(schSvg, entryX, y, exitX, y, '#777', 2);
-  // Right diagonal exit
-  drawLine(schSvg, exitX, y, yardRightX, mainY, '#777', 2);
-
-  // Label
-  drawLabel(schSvg, (entryX + exitX) / 2, y - 5, yt.name, 'jlbl');
+svgData.junctions.forEach(j => {
+  if (j.deg < 3) return;
+  
+  // Find nearby track segments that start/end near this junction
+  const jx = j.x, jy = j.y;
+  const nearbyTracks = [];
+  trackElements.forEach((el, i) => {
+    const t = svgData.paths[i];
+    // Check if any point in the path is very close to this junction
+    // We check the raw d string for coordinates near jx, jy
+    // Simpler: use the name to match FM yard tracks
+  });
+  
+  turnouts.push({
+    id: j.id,
+    x: j.x,
+    y: j.y,
+    links: j.links,
+    state: 0, // 0 = first branch selected, 1 = second branch
+    animating: false,
+    el: null, // will hold the triangle SVG element
+  });
 });
 
-// --- Lower loop (A tracks) ---
-// Left branch: main → 399 → 398
-drawLine(schSvg, S[400][0], mainY, S[399][0], S[399][1], '#888', 2);
-drawLine(schSvg, S[399][0], S[399][1], S[398][0], S[398][1], '#888', 2);
-// A-01-L and A-02-S (parallel)
-drawLine(schSvg, S[398][0], loopY, S[401][0], loopY, '#777', 2);
-drawLine(schSvg, S[398][0], loopY + trackGap, S[401][0], loopY + trackGap, '#777', 2);
-// Right branch: 401 → 402 → main
-drawLine(schSvg, S[401][0], S[401][1], S[402][0], S[402][1], '#888', 2);
-drawLine(schSvg, S[402][0], S[402][1], S[403][0], mainY, '#888', 2);
+document.getElementById('nTurnouts').textContent = turnouts.length;
 
-// A track labels
-drawLabel(schSvg, (S[398][0] + S[401][0]) / 2, loopY - 5, 'A-01-L', 'jlbl');
-drawLabel(schSvg, (S[398][0] + S[401][0]) / 2, loopY + trackGap - 5, 'A-02-S', 'jlbl');
+// ============================================================
+// STEP 3: Compute triangle orientation for each turnout
+// The triangle should point along the SELECTED branch direction.
+// We compute direction from the junction toward each linked junction.
+// ============================================================
 
-// Exit to SW (south from right side)
-drawDash(schSvg, S[403][0], mainY, S[403][0], mainY + 80);
-drawLabel(schSvg, S[403][0] + 20, mainY + 70, 'to SW', 'exit-lbl');
-
-// --- Junctions (triangles) ---
-for (const [id, pos] of Object.entries(S)) {
-  const j = junctions[id];
-  if (!j) continue;
-  const [cx, cy] = pos;
-  const isTurnout = j.links.length > 2;
-
-  // Triangle for turnouts, dot for pass-throughs
-  if (isTurnout) {
-    const tri = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-    tri.setAttribute('points', `${cx+7},${cy} ${cx-4},${cy-5} ${cx-4},${cy+5}`);
-    tri.setAttribute('fill', '#c0c0c0');
-    tri.style.cursor = 'pointer';
-    tri.addEventListener('mouseenter', () => tri.setAttribute('fill', '#fff'));
-    tri.addEventListener('mouseleave', () => tri.setAttribute('fill', '#c0c0c0'));
-    schSvg.appendChild(tri);
-  } else {
-    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    c.setAttribute('cx', cx); c.setAttribute('cy', cy);
-    c.setAttribute('r', 2.5);
-    c.setAttribute('fill', '#888');
-    schSvg.appendChild(c);
+turnouts.forEach(t => {
+  const j = junctionMap[t.id];
+  if (!j) return;
+  
+  // Get positions of linked junctions (only those we have coords for)
+  const linkedPositions = t.links
+    .map(lid => junctionMap[lid])
+    .filter(lj => lj != null);
+  
+  if (linkedPositions.length < 2) return;
+  
+  // Approach direction = first link, branch 0 = second link, branch 1 = third link
+  // Compute angles from this junction toward each linked junction
+  t.angles = linkedPositions.map(lj => {
+    const dx = lj.x - t.x;
+    const dy = lj.y - t.y;
+    return Math.atan2(dy, dx) * 180 / Math.PI;
+  });
+  
+  // Branch angles: skip the first (approach), use the remaining
+  // Actually for a 3-way junction, any two could be the selectable branches.
+  // Use links[1] and links[2] as the two options
+  if (t.angles.length >= 3) {
+    t.branchAngle0 = t.angles[1];
+    t.branchAngle1 = t.angles[2];
+  } else if (t.angles.length >= 2) {
+    t.branchAngle0 = t.angles[0];
+    t.branchAngle1 = t.angles[1];
   }
+  
+  // Normalize for shortest rotation
+  if (t.branchAngle1 !== undefined) {
+    let diff = t.branchAngle1 - t.branchAngle0;
+    while (diff > 180) diff -= 360;
+    while (diff < -180) diff += 360;
+    t.branchAngle1Norm = t.branchAngle0 + diff;
+  }
+});
+
+// ============================================================
+// STEP 4: Render switch indicator triangles at turnouts ONLY
+// ============================================================
+
+const TRI_LEN = 10;
+const TRI_HW = 6;
+
+turnouts.forEach(t => {
+  if (t.branchAngle0 === undefined) return;
+  
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.setAttribute('transform', `rotate(${t.branchAngle0}, ${t.x}, ${t.y})`);
+  g.style.cursor = 'pointer';
+  
+  const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+  poly.setAttribute('points',
+    `${t.x + TRI_LEN},${t.y} ${t.x - TRI_LEN * 0.2},${t.y - TRI_HW} ${t.x - TRI_LEN * 0.2},${t.y + TRI_HW}`
+  );
+  poly.setAttribute('fill', TURNOUT_COLOR);
+  poly.style.transition = 'fill 150ms';
+  g.appendChild(poly);
+  
+  // Hover
+  g.addEventListener('mouseenter', () => poly.setAttribute('fill', '#fff'));
+  g.addEventListener('mouseleave', () => poly.setAttribute('fill', TURNOUT_COLOR));
+  
+  // Click to toggle
+  g.addEventListener('click', () => toggleTurnout(t));
+  
+  svg.appendChild(g);
+  t.el = g;
+  
+  // Small junction ID label
+  const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  lbl.setAttribute('x', t.x);
+  lbl.setAttribute('y', t.y - 12);
+  lbl.setAttribute('text-anchor', 'middle');
+  lbl.setAttribute('fill', '#444');
+  lbl.setAttribute('font-size', '7');
+  lbl.setAttribute('font-family', 'Consolas,Monaco,monospace');
+  lbl.textContent = t.id;
+  svg.appendChild(lbl);
+});
+
+// ============================================================
+// STEP 5: Toggle turnout — animate triangle rotation
+// ============================================================
+
+const lastActionEl = document.getElementById('lastAction');
+
+function toggleTurnout(t) {
+  if (t.animating) return;
+  t.animating = true;
+  
+  const oldState = t.state;
+  const newState = 1 - oldState;
+  t.state = newState;
+  
+  const fromAngle = oldState === 0 ? t.branchAngle0 : t.branchAngle1Norm;
+  const toAngle = newState === 0 ? t.branchAngle0 : t.branchAngle1Norm;
+  const t0 = performance.now();
+  const duration = 300;
+  
+  lastActionEl.textContent = `J-${t.id} → ${newState === 0 ? 'ROUTE A' : 'ROUTE B'}`;
+  
+  function frame(now) {
+    const raw = Math.min((now - t0) / duration, 1);
+    const e = easeOutCubic(raw);
+    const angle = fromAngle + (toAngle - fromAngle) * e;
+    t.el.setAttribute('transform', `rotate(${angle}, ${t.x}, ${t.y})`);
+    
+    if (raw < 1) {
+      requestAnimationFrame(frame);
+    } else {
+      t.el.setAttribute('transform', `rotate(${toAngle}, ${t.x}, ${t.y})`);
+      t.animating = false;
+    }
+  }
+  requestAnimationFrame(frame);
 }
 
-// Station title
-drawLabel(schSvg, 400, 40, 'FARM (FM)', 'tlbl');
+// ============================================================
+// STEP 6: Pan and zoom
+// ============================================================
 
-// Exit labels
-drawLabel(schSvg, pad - 10, mainY - 10, 'to OWC', 'exit-lbl');
-drawLabel(schSvg, pad + W + 10, mainY - 10, 'to FRC', 'exit-lbl');
+let viewBox = { x: 0, y: 0, w: svgW, h: svgH };
+let isPanning = false;
+let panStart = { x: 0, y: 0 };
 
-// Section labels
-drawLabel(schSvg, (yardLeftX + yardRightX) / 2, mainY - 100, 'Transfer Yard B', 'exit-lbl');
-drawLabel(schSvg, (S[398][0] + S[401][0]) / 2, loopY + 55, 'Loading Area A', 'exit-lbl');
+function updateViewBox() {
+  svg.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
+}
+
+svg.addEventListener('mousedown', e => {
+  if (e.target.closest('[style*="cursor: pointer"]') || e.target.closest('g')) return;
+  isPanning = true;
+  panStart = { x: e.clientX, y: e.clientY };
+});
+
+window.addEventListener('mousemove', e => {
+  if (!isPanning) return;
+  const dx = (e.clientX - panStart.x) * viewBox.w / svg.clientWidth;
+  const dy = (e.clientY - panStart.y) * viewBox.h / svg.clientHeight;
+  viewBox.x -= dx;
+  viewBox.y -= dy;
+  panStart = { x: e.clientX, y: e.clientY };
+  updateViewBox();
+});
+
+window.addEventListener('mouseup', () => { isPanning = false; });
+
+svg.addEventListener('wheel', e => {
+  e.preventDefault();
+  const factor = e.deltaY > 0 ? 1.1 : 0.9;
+  const rect = svg.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) / rect.width;
+  const my = (e.clientY - rect.top) / rect.height;
+  
+  const newW = viewBox.w * factor;
+  const newH = viewBox.h * factor;
+  viewBox.x += (viewBox.w - newW) * mx;
+  viewBox.y += (viewBox.h - newH) * my;
+  viewBox.w = newW;
+  viewBox.h = newH;
+  updateViewBox();
+}, { passive: false });
 </script>
 </body>
 </html>
