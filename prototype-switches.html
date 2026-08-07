@@ -3,18 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Derail Valley — CTC Dispatch Map</title>
+<title>Farm (FM) — CTC Dispatch Schematic</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #161616; overflow: auto; min-height: 100vh; }
-  #map { display: block; width: 100vw; height: calc(100vh - 50px); }
-
-  .trk { stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; transition: stroke 200ms ease; }
-  .stn-dot { fill: none; stroke: #666; stroke-width: 1.5; }
-  .stn-name { fill: #999; font: 700 9px 'Consolas','Monaco',monospace; letter-spacing: 0.5px; }
-  .stn-code { fill: #555; font: 600 7px 'Consolas','Monaco',monospace; }
-  .jlbl { fill: #555; font: 600 7px 'Consolas','Monaco',monospace; }
-
+  body { background: #161616; overflow: hidden; height: 100vh; width: 100vw; }
+  svg { width: 100%; height: 100%; display: block; }
+  .trk { stroke: #999; stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .trk-main { stroke: #b0b0b0; stroke-width: 3; }
+  .trk-yard { stroke: #888; stroke-width: 2; }
+  .trk-dim { stroke: #333; }
+  .jdot { fill: #c0c0c0; cursor: pointer; }
+  .jdot:hover { fill: #fff; }
+  .lbl { fill: #888; font: 700 11px 'Consolas','Monaco',monospace; }
+  .lbl-sm { fill: #555; font: 600 8px 'Consolas','Monaco',monospace; }
+  .lbl-title { fill: #999; font: 700 14px 'Consolas','Monaco',monospace; letter-spacing: 1px; }
+  .lbl-sub { fill: #555; font: 600 10px 'Consolas','Monaco',monospace; }
+  .dash { stroke-dasharray: 8 6; }
   .title-bar {
     position: fixed; top: 0; left: 0; right: 0; height: 24px;
     background: #0c0c0c; border-bottom: 1px solid #222;
@@ -22,303 +26,211 @@
     font: 10px 'Consolas','Monaco',monospace; color: #555;
     letter-spacing: 1px; text-transform: uppercase; z-index: 10;
   }
-  #status {
+  #info {
     position: fixed; bottom: 0; left: 0; right: 0; height: 26px;
     background: #0c0c0c; border-top: 1px solid #222;
     display: flex; align-items: center; padding: 0 16px;
     font: 10px 'Consolas','Monaco',monospace; color: #555; gap: 20px; z-index: 10;
   }
-  #status .v { color: #999; font-weight: 700; }
+  #info .v { color: #999; font-weight: 700; }
 </style>
 </head>
 <body>
-<div class="title-bar">Derail Valley — CTC Dispatch Console</div>
-<svg id="map" viewBox="0 0 1800 950" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1800" height="950" fill="#161616"/>
-  <g id="g-tracks"></g>
-  <g id="g-tris"></g>
-  <g id="g-labels"></g>
+<div class="title-bar">Farm (FM) — CTC Station Schematic — Prototype</div>
+
+<svg id="map" viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1000" height="600" fill="#161616"/>
+
+  <!-- ==========================================================
+       FARM (FM) STATION SCHEMATIC
+       Based on official PDF pages 20-21 and track_data.json
+       
+       Layout from schematic PDF:
+       - Main line runs upper-left to upper-right (A-03-L)
+       - A triangular loop drops down from the main line
+       - Left branch diverges down-left from main
+       - Bottom of loop has loading tracks (A-01-L, A-02-S)
+       - Right side rejoins main line
+       - Transfer Yard B is in the upper area (7 parallel tracks)
+       - Tracks: B-07-P, B-06-O, B-05-O, (through), B-03-S, B-02-I, B-01-S
+       ========================================================== -->
+
+  <!-- === MAIN LINE (A-03-L) — runs across the top === -->
+  <!-- Dashed entry from left (to OWC) -->
+  <line class="trk trk-main dash" x1="30" y1="200" x2="130" y2="200"/>
+  <!-- Main line through station -->
+  <line class="trk trk-main" x1="130" y1="200" x2="870" y2="200"/>
+  <!-- Dashed exit right (to OR/FRC) -->
+  <line class="trk trk-main dash" x1="870" y1="200" x2="970" y2="200"/>
+
+  <!-- === LEFT BRANCH (diverges down-left from main) === -->
+  <!-- J-155 area: main branches down -->
+  <line class="trk" x1="200" y1="200" x2="150" y2="260"/>
+  <!-- Down to lower junction cluster -->
+  <line class="trk" x1="150" y1="260" x2="180" y2="350"/>
+
+  <!-- === BOTTOM TRACKS (A-01-L, A-02-S) === -->
+  <!-- A-01-L loading track -->
+  <line class="trk trk-yard" x1="180" y1="350" x2="530" y2="350"/>
+  <!-- A-02-S siding -->
+  <line class="trk trk-yard" x1="180" y1="380" x2="530" y2="380"/>
+
+  <!-- Track labels for A tracks -->
+  <text class="lbl" x="350" y="344">A-01-L</text>
+  <text class="lbl-sm" x="350" y="376">A-02-S</text>
+
+  <!-- === RIGHT BRANCH (rejoins main from below) === -->
+  <line class="trk" x1="530" y1="350" x2="750" y2="200"/>
+  <line class="trk" x1="530" y1="380" x2="720" y2="200"/>
+
+  <!-- === DASHED EXIT SOUTH (to SW) === -->
+  <line class="trk dash" x1="870" y1="200" x2="870" y2="280"/>
+  <line class="trk dash" x1="870" y1="280" x2="870" y2="350"/>
+
+  <!-- === TRANSFER YARD B (7 parallel tracks in upper area) === -->
+  <!-- Left fan-out from junction cluster around x=250 -->
+  <!-- Track B-07-P (topmost yard track) -->
+  <line class="trk trk-yard" x1="280" y1="200" x2="250" y2="100"/>
+  <line class="trk trk-yard" x1="250" y1="100" x2="650" y2="100"/>
+  <line class="trk trk-yard" x1="650" y1="100" x2="680" y2="200"/>
+
+  <!-- Track B-06-O -->
+  <line class="trk trk-yard" x1="300" y1="200" x2="280" y2="120"/>
+  <line class="trk trk-yard" x1="280" y1="120" x2="630" y2="120"/>
+  <line class="trk trk-yard" x1="630" y1="120" x2="660" y2="200"/>
+
+  <!-- Track B-05-O -->
+  <line class="trk trk-yard" x1="320" y1="200" x2="310" y2="140"/>
+  <line class="trk trk-yard" x1="310" y1="140" x2="610" y2="140"/>
+  <line class="trk trk-yard" x1="610" y1="140" x2="640" y2="200"/>
+
+  <!-- (Through track = main line already drawn) -->
+
+  <!-- Track B-03-S -->
+  <line class="trk trk-yard" x1="350" y1="200" x2="380" y2="240"/>
+  <line class="trk trk-yard" x1="380" y1="240" x2="560" y2="240"/>
+  <line class="trk trk-yard" x1="560" y1="240" x2="600" y2="200"/>
+
+  <!-- Track B-02-I -->
+  <line class="trk trk-yard" x1="370" y1="200" x2="400" y2="260"/>
+  <line class="trk trk-yard" x1="400" y1="260" x2="540" y2="260"/>
+  <line class="trk trk-yard" x1="540" y1="260" x2="580" y2="200"/>
+
+  <!-- Track B-01-S -->
+  <line class="trk trk-yard" x1="390" y1="200" x2="420" y2="280"/>
+  <line class="trk trk-yard" x1="420" y1="280" x2="520" y2="280"/>
+  <line class="trk trk-yard" x1="520" y1="280" x2="560" y2="200"/>
+
+  <!-- === YARD TRACK LABELS === -->
+  <text class="lbl-sm" x="440" y="96">B-07-P</text>
+  <text class="lbl-sm" x="440" y="116">B-06-O</text>
+  <text class="lbl-sm" x="440" y="136">B-05-O</text>
+  <text class="lbl-sm" x="440" y="196" fill="#666">through</text>
+  <text class="lbl-sm" x="460" y="236">B-03-S</text>
+  <text class="lbl-sm" x="460" y="256">B-02-I</text>
+  <text class="lbl-sm" x="460" y="276">B-01-S</text>
+
+  <!-- === JUNCTION TRIANGLES === -->
+  <!-- Each triangle is at a turnout point, pointing along selected route -->
+
+  <!-- J at x=200 (left main/branch split) -->
+  <g class="jdot" transform="rotate(0, 200, 200)">
+    <polygon points="210,200 195,194 195,206" fill="#b0b0b0"/>
+  </g>
+
+  <!-- J at x=280 (B-07 entry left) -->
+  <g class="jdot" transform="rotate(0, 280, 200)">
+    <polygon points="290,200 275,194 275,206" fill="#b0b0b0"/>
+  </g>
+
+  <!-- J at x=300 (B-06 entry left) -->
+  <g class="jdot" transform="rotate(0, 300, 200)">
+    <polygon points="310,200 295,194 295,206" fill="#b0b0b0"/>
+  </g>
+
+  <!-- J at x=320 (B-05 entry left) -->
+  <g class="jdot" transform="rotate(0, 320, 200)">
+    <polygon points="330,200 315,194 315,206" fill="#b0b0b0"/>
+  </g>
+
+  <!-- J at x=350 (B-03 entry left) -->
+  <g class="jdot" transform="rotate(0, 350, 200)">
+    <polygon points="360,200 345,194 345,206" fill="#b0b0b0"/>
+  </g>
+
+  <!-- J at x=370 (B-02 entry left) -->
+  <g class="jdot" transform="rotate(0, 370, 200)">
+    <polygon points="380,200 365,194 365,206" fill="#b0b0b0"/>
+  </g>
+
+  <!-- J at x=390 (B-01 entry left) -->
+  <g class="jdot" transform="rotate(0, 390, 200)">
+    <polygon points="400,200 385,194 385,206" fill="#b0b0b0"/>
+  </g>
+
+  <!-- Right side junctions (yard exit) -->
+  <g class="jdot" transform="rotate(180, 560, 200)">
+    <polygon points="570,200 555,194 555,206" fill="#b0b0b0"/>
+  </g>
+  <g class="jdot" transform="rotate(180, 580, 200)">
+    <polygon points="590,200 575,194 575,206" fill="#b0b0b0"/>
+  </g>
+  <g class="jdot" transform="rotate(180, 600, 200)">
+    <polygon points="610,200 595,194 595,206" fill="#b0b0b0"/>
+  </g>
+  <g class="jdot" transform="rotate(180, 640, 200)">
+    <polygon points="650,200 635,194 635,206" fill="#b0b0b0"/>
+  </g>
+  <g class="jdot" transform="rotate(180, 660, 200)">
+    <polygon points="670,200 655,194 655,206" fill="#b0b0b0"/>
+  </g>
+  <g class="jdot" transform="rotate(180, 680, 200)">
+    <polygon points="690,200 675,194 675,206" fill="#b0b0b0"/>
+  </g>
+
+  <!-- Bottom area junctions -->
+  <g class="jdot" transform="rotate(120, 150, 260)">
+    <polygon points="160,260 145,254 145,266" fill="#b0b0b0"/>
+  </g>
+  <g class="jdot" transform="rotate(-45, 750, 200)">
+    <polygon points="760,200 745,194 745,206" fill="#b0b0b0"/>
+  </g>
+  <g class="jdot" transform="rotate(-30, 720, 200)">
+    <polygon points="730,200 715,194 715,206" fill="#b0b0b0"/>
+  </g>
+
+  <!-- Right exit junction (to SW) -->
+  <g class="jdot" transform="rotate(90, 870, 200)">
+    <polygon points="880,200 865,194 865,206" fill="#b0b0b0"/>
+  </g>
+
+  <!-- === STATION LABELS === -->
+  <text class="lbl-title" x="500" y="50" text-anchor="middle">FARM</text>
+  <text class="lbl-sub" x="500" y="66" text-anchor="middle">FM</text>
+
+  <!-- Exit labels -->
+  <text class="lbl-sm" x="40" y="192">to OWC</text>
+  <text class="lbl-sm" x="910" y="192">to FRC/OR</text>
+  <text class="lbl-sm" x="880" y="370">to SW</text>
+
+  <!-- Yard section labels -->
+  <text class="lbl" x="80" y="420" fill="#666">A</text>
+  <text class="lbl" x="440" y="80" fill="#666">B — Transfer Yard</text>
+
+  <!-- Water tower icon (simplified) -->
+  <circle cx="160" cy="395" r="6" fill="none" stroke="#4a9eff" stroke-width="1.5"/>
+  <text class="lbl-sm" x="170" y="399" fill="#4a9eff">W</text>
+
+  <!-- Station office icon -->
+  <rect x="440" y="82" width="10" height="10" rx="1" fill="none" stroke="#e8a832" stroke-width="1"/>
+
 </svg>
-<div id="status">
-  <span>JUNCTIONS: <span class="v" id="nj">0</span></span>
-  <span>CLICK SWITCH TO TOGGLE</span>
-  <span id="act" class="v"></span>
+
+<div id="info">
+  <span>STATION: <span class="v">Farm (FM)</span></span>
+  <span>JUNCTIONS: <span class="v">17</span></span>
+  <span>TRACKS: A-01-L, A-02-S, A-03-L, B-01 to B-07</span>
 </div>
 
-<script>
-// ============================================================
-//  DERAIL VALLEY CTC SCHEMATIC
-//  Laid out like a real dispatcher's track diagram:
-//  - Main lines run roughly horizontal
-//  - Branches angle off at 45°
-//  - Stations arranged left-to-right, top-to-bottom
-//  - Track topology matches the actual game world
-// ============================================================
-
-const A = '#b0b0b0';   // active track
-const D = '#2a2a2a';   // inactive/dim
-const easeOut = t => 1 - Math.pow(1-t, 3);
-const DUR = 300;
-const TL = 11, TW = 7; // triangle length, half-width
-
-// ============================================================
-//  STATION POSITIONS — systematic CTC schematic layout
-//
-//  The network has two main horizontal corridors:
-//    NORTH LINE: IMW — MF — FRC — SM — FF — OWN — MB — IME
-//    SOUTH LINE: CW — OWC — FM — OR — CP — FRS — HB
-//  Connected by vertical links at SM/OR and GF/CMS/CME
-//  SW branches off the south-west
-//  CSW/CS are the western terminus
-// ============================================================
-
-const S = {
-  // === NORTH CORRIDOR (y ≈ 250) ===
-  IMW:  [150,  200],
-  MF:   [300,  250],
-  FRC:  [480,  280],
-  SM:   [680,  300],
-  FF:   [880,  220],
-  OWN:  [1050, 250],
-  MB:   [1200, 180],
-  IME:  [1400, 150],
-
-  // === SOUTH CORRIDOR (y ≈ 550) ===
-  CW:   [150,  500],
-  CS:   [150,  600],
-  CSW:  [150,  700],
-  OWC:  [320,  500],
-  FM:   [480,  520],
-  OR:   [640,  500],
-  CP:   [800,  550],
-  FRS:  [950,  620],
-  SW:   [200,  780],
-
-  // === EAST CLUSTER (right side) ===
-  GF:   [1200, 380],
-  CMS:  [1350, 380],
-  CME:  [1500, 320],
-
-  // === HARBOR (south-east) ===
-  HB:   [1200, 650],
-};
-
-// ============================================================
-//  TRACK CONNECTIONS — actual Derail Valley route network
-//  Each entry: [stationA, stationB, isMainline]
-// ============================================================
-
-const tracks = [
-  // North corridor (main line)
-  ['IMW', 'MF',   true],
-  ['MF',  'FRC',  true],
-  ['FRC', 'SM',   true],
-  ['SM',  'FF',   true],
-  ['FF',  'OWN',  true],
-  ['OWN', 'MB',   true],
-  ['MB',  'IME',  true],
-
-  // South corridor
-  ['CW',  'OWC',  true],
-  ['OWC', 'FM',   true],
-  ['FM',  'OR',   true],
-  ['OR',  'CP',   true],
-  ['CP',  'FRS',  true],
-
-  // West connections
-  ['CW',  'CS',   true],
-  ['CS',  'CSW',  true],
-  ['CSW', 'SW',   true],
-
-  // North-South links
-  ['FRC', 'OWC',  false],  // tunnel/shortcut
-  ['SM',  'OR',   false],  // central link
-  ['SM',  'GF',   false],  // east link
-
-  // East cluster
-  ['OWN', 'GF',   false],
-  ['GF',  'CMS',  true],
-  ['CMS', 'CME',  true],
-  ['CME', 'IME',  false],
-
-  // Harbor connections
-  ['GF',  'HB',   false],
-  ['FRS', 'HB',   false],
-  ['CP',  'HB',   false],
-
-  // Additional connections from game
-  ['FRS', 'SW',   false],  // forest south to sawmill area
-  ['FF',  'MB',   false],  // food factory shortcut
-];
-
-// ============================================================
-//  JUNCTION DEFINITIONS
-//  Placed at points where routes diverge
-//  [position, mainTarget, divTarget]
-// ============================================================
-
-const jDefs = [];
-let jId = 1;
-
-function mid(a, b, t) {
-  t = t || 0.5;
-  return [S[a][0] + (S[b][0]-S[a][0])*t, S[a][1] + (S[b][1]-S[a][1])*t];
-}
-
-function addJ(pos, mainStn, divStn) {
-  const mx = S[mainStn][0]-pos[0], my = S[mainStn][1]-pos[1];
-  const ml = Math.sqrt(mx*mx+my*my);
-  const dx = S[divStn][0]-pos[0], dy = S[divStn][1]-pos[1];
-  const dl = Math.sqrt(dx*dx+dy*dy);
-  jDefs.push({
-    id: jId++,
-    fp: pos,
-    md: [mx/ml, my/ml],
-    dd: [dx/dl, dy/dl],
-    st: 0, anim: false
-  });
-}
-
-// North line junctions
-addJ(mid('MF','FRC', 0.85),  'FRC', 'OWC');   // FRC junction: main→FRC, div→OWC via tunnel
-addJ(mid('SM','FF', 0.15),   'FF',  'GF');     // SM east: main→FF, div→GF
-addJ(mid('SM','FRC', 0.15),  'FRC', 'OR');     // SM west: main→FRC, div→OR
-addJ(mid('OWN','MB', 0.3),   'MB',  'GF');     // OWN east: main→MB, div→GF
-addJ(mid('FF','OWN', 0.8),   'OWN', 'MB');     // near OWN: main→OWN, div shortcut
-addJ(mid('MB','IME', 0.6),   'IME', 'CME');    // MB-IME: main→IME, div→CME
-
-// South line junctions
-addJ(mid('CW','CS', 0.5),    'CS',  'OWC');    // CW area: main→CS, div→OWC
-addJ(mid('FM','OR', 0.8),    'OR',  'SM');      // near OR: main→OR, div→SM link
-addJ(mid('CP','FRS', 0.5),   'FRS', 'HB');     // CP-FRS: main→FRS, div→HB
-addJ(mid('FRS','HB', 0.3),   'HB',  'SW');     // FRS area: main→HB, div→SW
-
-// East junctions
-addJ(mid('GF','CMS', 0.5),   'CMS', 'HB');     // GF-CMS: main→CMS, div→HB
-addJ(mid('CMS','CME', 0.5),  'CME', 'IME');     // CMS-CME: main→CME, div→IME
-
-// ============================================================
-//  RENDER
-// ============================================================
-
-const svg = document.getElementById('map');
-const gT = document.getElementById('g-tracks');
-const gR = document.getElementById('g-tris');
-const gL = document.getElementById('g-labels');
-
-// Draw tracks
-tracks.forEach(([a, b, main], i) => {
-  const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-  l.setAttribute('x1', S[a][0]); l.setAttribute('y1', S[a][1]);
-  l.setAttribute('x2', S[b][0]); l.setAttribute('y2', S[b][1]);
-  l.classList.add('trk');
-  l.setAttribute('stroke', main ? A : D);
-  l.setAttribute('stroke-width', main ? '2.5' : '2');
-  l.id = `t${i}`;
-  gT.appendChild(l);
-});
-
-// Draw stations
-Object.entries(S).forEach(([code, [x, y]]) => {
-  // Dot
-  const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-  c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 5);
-  c.classList.add('stn-dot');
-  gL.appendChild(c);
-
-  // Name
-  const names = {
-    IMW:'Iron Mine West', MF:'Machine Factory', FRC:'Forest Central', SM:'Steel Mill',
-    FF:'Food Factory', OWN:'Oil Well North', MB:'Military Base', IME:'Iron Mine East',
-    CW:'City West', CS:'City South', CSW:'City SW', OWC:'Oil Well Central', FM:'Farm',
-    OR:'Oil Refinery', CP:'Coal Power', FRS:'Forest South', SW:'Sawmill',
-    GF:'Goods Factory', CMS:'Coal Mine S', CME:'Coal Mine E', HB:'Harbor',
-  };
-
-  const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  // Position label to avoid track overlaps
-  const above = ['IMW','MF','FF','OWN','MB','IME','CME','CW','SM','FRC'].includes(code);
-  t.setAttribute('x', x); t.setAttribute('y', above ? y - 14 : y + 20);
-  t.setAttribute('text-anchor', 'middle');
-  t.classList.add('stn-name');
-  t.textContent = names[code] || code;
-  gL.appendChild(t);
-
-  // Code
-  const t2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  t2.setAttribute('x', x); t2.setAttribute('y', above ? y - 5 : y + 29);
-  t2.setAttribute('text-anchor', 'middle');
-  t2.classList.add('stn-code');
-  t2.textContent = code;
-  gL.appendChild(t2);
-});
-
-// ============================================================
-//  JUNCTIONS — triangles generated from geometry
-// ============================================================
-
-document.getElementById('nj').textContent = jDefs.length;
-const actEl = document.getElementById('act');
-
-jDefs.forEach(j => {
-  const [fx, fy] = j.fp;
-  const mRad = Math.atan2(j.md[1], j.md[0]);
-  const dRad = Math.atan2(j.dd[1], j.dd[0]);
-  j.mDeg = mRad * 180 / Math.PI;
-  let diff = (dRad * 180 / Math.PI) - j.mDeg;
-  while (diff > 180) diff -= 360;
-  while (diff < -180) diff += 360;
-  j.dDeg = j.mDeg + diff;
-
-  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-  g.id = `j${j.id}`;
-  g.style.cursor = 'pointer';
-  g.setAttribute('transform', `rotate(${j.mDeg},${fx},${fy})`);
-
-  const p = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-  p.setAttribute('points',
-    `${fx+TL},${fy} ${fx-TL*0.25},${fy-TW} ${fx-TL*0.25},${fy+TW}`);
-  p.setAttribute('fill', '#c0c0c0');
-  p.style.transition = 'fill 150ms';
-  g.appendChild(p);
-
-  g.addEventListener('mouseenter', () => p.setAttribute('fill', '#fff'));
-  g.addEventListener('mouseleave', () => p.setAttribute('fill', '#c0c0c0'));
-
-  gR.appendChild(g);
-  j.el = g;
-
-  // Label
-  const bisect = (mRad + dRad) / 2 + Math.PI;
-  const lb = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  lb.setAttribute('x', fx + Math.cos(bisect) * 14);
-  lb.setAttribute('y', fy + Math.sin(bisect) * 14 + 3);
-  lb.setAttribute('text-anchor', 'middle');
-  lb.classList.add('jlbl');
-  lb.textContent = j.id;
-  gL.appendChild(lb);
-
-  // Click
-  g.addEventListener('click', () => {
-    if (j.anim) return;
-    j.anim = true;
-    const o = j.st, n = 1 - o;
-    j.st = n;
-    const from = o === 0 ? j.mDeg : j.dDeg;
-    const to = n === 0 ? j.mDeg : j.dDeg;
-    const t0 = performance.now();
-    actEl.textContent = `J-${j.id} → ${n===0?'MAIN':'DIV'}`;
-
-    (function frame(now) {
-      const r = Math.min((now-t0)/DUR, 1);
-      const e = easeOut(r);
-      const a = from + (to-from) * e;
-      g.setAttribute('transform', `rotate(${a},${fx},${fy})`);
-      if (r < 1) requestAnimationFrame(frame);
-      else { g.setAttribute('transform', `rotate(${to},${fx},${fy})`); j.anim = false; }
-    })(performance.now());
-  });
-});
-</script>
 </body>
 </html>
