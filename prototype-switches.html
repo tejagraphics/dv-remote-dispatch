@@ -3,171 +3,236 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Turnout Concept Model</title>
+<title>Farm (FM) — Single Station Turnout Prototype</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: #141414;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-    font-family: 'Consolas', 'Monaco', monospace;
-    color: #888;
-  }
-  h1 { font-size: 11px; color: #555; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; }
-  .hint { font-size: 9px; color: #444; margin-bottom: 20px; }
-  svg { display: block; }
-  .state { font-size: 11px; color: #999; margin-top: 16px; height: 16px; }
-  .state b { color: #ccc; }
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#131313;overflow:hidden;height:100vh;font-family:Consolas,Monaco,monospace}
+svg{width:100%;height:100%;display:block;cursor:grab}
+svg:active{cursor:grabbing}
+.bar{position:fixed;left:0;right:0;height:22px;background:#0a0a0a;
+  display:flex;align-items:center;padding:0 14px;font-size:10px;color:#555;
+  letter-spacing:1px;text-transform:uppercase;z-index:10}
+.bar.top{top:0;border-bottom:1px solid #1e1e1e}
+.bar.bot{bottom:0;border-top:1px solid #1e1e1e;gap:16px}
+.bar .v{color:#999;font-weight:700}
+#debug{position:fixed;top:28px;right:8px;width:260px;background:#0c0c0cdd;
+  border:1px solid #222;border-radius:3px;padding:8px;font-size:9px;color:#666;
+  line-height:1.6;z-index:20;display:none}
+#debug b{color:#999}
+#debug .row{border-bottom:1px solid #1a1a1a;padding:2px 0}
 </style>
 </head>
 <body>
-
-<h1>Turnout Concept Model</h1>
-<p class="hint">Click the switch point to toggle between THROUGH and DIVERGE</p>
-
-<svg id="turnout" width="700" height="350" viewBox="0 0 700 350" xmlns="http://www.w3.org/2000/svg">
-  <rect width="700" height="350" fill="#141414"/>
-
-  <!--
-    A railway turnout has THREE tracks meeting at ONE point:
-
-    1. APPROACH — the track the train arrives on
-    2. THROUGH — the straight-ahead continuation
-    3. DIVERGING — the branching route
-
-    The switch point (●) is where these three meet.
-    The triangle indicator sits AT this point.
-
-    When set to THROUGH:
-      approach + through = ACTIVE (bright)
-      diverging = INACTIVE (dim)
-      triangle points along through direction
-
-    When set to DIVERGE:
-      approach + diverging = ACTIVE (bright)
-      through = INACTIVE (dim)
-      triangle points along diverging direction
-
-    The triangle is PART OF the switch point.
-    It does NOT float on a track.
-    It does NOT mark a node.
-    It indicates WHICH of the two exits is currently selected.
-  -->
-
-  <!-- APPROACH TRACK: comes from the left, always active -->
-  <line id="approach" x1="50" y1="200" x2="320" y2="200"
-        stroke="#b0b0b0" stroke-width="3" stroke-linecap="round"/>
-
-  <!-- THROUGH TRACK: continues straight right from the switch point -->
-  <line id="through" x1="350" y1="200" x2="650" y2="200"
-        stroke="#b0b0b0" stroke-width="3" stroke-linecap="round"/>
-
-  <!-- DIVERGING TRACK: branches up-right from the switch point -->
-  <line id="diverge" x1="345" y1="195" x2="600" y2="80"
-        stroke="#333" stroke-width="3" stroke-linecap="round"/>
-
-  <!--
-    SWITCH POINT: the exact location where approach meets the two routes.
-    This is where the triangle sits.
-    The triangle IS the switch indicator — it shows which route is selected.
-  -->
-
-  <!-- Triangle indicator at the switch point -->
-  <!-- It sits right at the junction of the three tracks -->
-  <!-- Currently pointing RIGHT (along the through route) -->
-  <g id="indicator" style="cursor:pointer" transform="rotate(0, 335, 200)">
-    <!-- Small solid triangle — tip points along selected route -->
-    <polygon id="tri" points="347,200 328,192 328,208" fill="#c8c8c8"/>
-  </g>
-
-  <!-- Labels -->
-  <text x="120" y="225" fill="#555" font-size="10" font-family="Consolas,Monaco,monospace">APPROACH</text>
-  <text id="lbl-through" x="500" y="225" fill="#777" font-size="10" font-family="Consolas,Monaco,monospace">THROUGH</text>
-  <text id="lbl-diverge" x="520" y="72" fill="#444" font-size="10" font-family="Consolas,Monaco,monospace">DIVERGING</text>
-
-  <!-- Switch point dot (the physical pivot) -->
-  <circle cx="335" cy="200" r="2" fill="#888" id="pivot"/>
-</svg>
-
-<div class="state" id="stateLabel">State: <b>THROUGH</b></div>
+<div class="bar top">Farm (FM) — Single Station Prototype · Press D for debug panel</div>
+<svg id="map" xmlns="http://www.w3.org/2000/svg"></svg>
+<div class="bar bot">
+  <span>TURNOUTS: <span class="v">18</span></span>
+  <span>Click indicator to toggle switch state</span>
+  <span id="act" class="v"></span>
+</div>
+<div id="debug">
+  <div style="color:#888;margin-bottom:4px;font-size:10px">DEBUG — Turnout Inspector</div>
+  <div id="debugContent">Hover over an indicator to inspect</div>
+</div>
 
 <script>
-const indicator = document.getElementById('indicator');
-const throughLine = document.getElementById('through');
-const divergeLine = document.getElementById('diverge');
-const lblThrough = document.getElementById('lbl-through');
-const lblDiverge = document.getElementById('lbl-diverge');
-const stateLabel = document.getElementById('stateLabel');
-const pivot = document.getElementById('pivot');
+const FM = {"tracks": [{"d": "M 499.7,565.4 C 498.4,567.3 497.0,569.2 495.7,571.1", "name": "[Y]_[FM]_[--]"}, {"d": "M 720.5,252.6 C 651.0,351.1 581.4,449.6 511.9,548.1", "name": "[Y]_[FM]_[--]"}, {"d": "M 736.7,229.6 C 735.4,231.5 734.0,233.4 732.7,235.3", "name": "[Y]_[FM]_[--]"}, {"d": "M 681.5,292.2 C 674.0,300.3 666.8,309.2 660.0,318.7 C 658.3,321.1 656.6,323.5 655.0,325.9 C 637.4,351.0 619.6,375.9 602.0,400.9 C 584.3,425.9 566.7,451.0 549.0,476.0 C 547.3,478.3 545.6,480.7 544.0,483.1 C 537.2,492.8 530.8,503.1 524.9,514.0", "name": "[Y]_[FM]_[B-07-P]"}, {"d": "M 509.9,541.8 C 511.4,539.1 512.8,536.4 514.3,533.6", "name": "[Y]_[FM]_[--]"}, {"d": "M 700.6,271.6 C 698.7,273.6 696.8,275.7 695.0,277.7", "name": "[Y]_[FM]_[--]"}, {"d": "M 682.2,293.8 C 630.1,367.7 578.0,441.5 525.9,515.3", "name": "[Y]_[FM]_[B-06-O]"}, {"d": "M 494.8,569.6 C 496.3,566.9 497.8,564.2 499.3,561.4", "name": "[Y]_[FM]_[--]"}, {"d": "M 719.7,251.1 C 717.8,253.1 715.9,255.1 714.1,257.1", "name": "[Y]_[FM]_[--]"}, {"d": "M 701.3,273.3 C 637.8,363.2 574.3,453.2 510.8,543.1", "name": "[Y]_[FM]_[B-05-O]"}, {"d": "M 707.5,286.7 C 701.5,297.6 695.1,307.9 688.4,317.6 C 686.7,320.0 685.1,322.4 683.4,324.7 C 665.6,349.6 648.0,374.8 630.4,399.8 C 612.7,424.8 595.0,449.7 577.4,474.8 C 575.7,477.2 574.1,479.6 572.4,482.0 C 565.5,491.5 558.4,500.4 550.9,508.5", "name": "[Y]_[FM]_[B-01-S]"}, {"d": "M 531.8,529.1 C 533.7,527.0 535.5,525.0 537.4,523.0", "name": "[Y]_[FM]_[--]"}, {"d": "M 722.5,258.9 C 721.0,261.6 719.5,264.3 718.1,267.1", "name": "[Y]_[FM]_[--]"}, {"d": "M 706.5,285.4 C 654.4,359.2 602.3,433.0 550.2,506.9", "name": "[Y]_[FM]_[B-02-I]"}, {"d": "M 512.7,549.6 C 514.6,547.6 516.4,545.6 518.3,543.6", "name": "[Y]_[FM]_[--]"}, {"d": "M 737.5,231.1 C 736.1,233.8 734.6,236.5 733.1,239.2", "name": "[Y]_[FM]_[--]"}, {"d": "M 721.6,257.6 C 658.1,347.5 594.6,437.5 531.1,527.4", "name": "[Y]_[FM]_[B-03-S]"}, {"d": "M 161.7,72.7 C 160.5,116.8 166.6,160.7 175.9,202.2 C 185.2,243.7 197.8,283.1 210.2,322.5 C 230.8,388.2 252.4,457.1 289.8,500.1 C 308.5,521.6 331.0,535.7 354.0,535.9 C 365.6,536.0 377.2,532.6 387.8,525.4 C 398.4,518.2 408.0,507.3 415.5,493.3 C 428.4,468.8 434.1,437.0 440.1,406.5 C 443.1,391.2 446.3,376.0 450.8,361.7 C 455.3,347.4 461.1,333.9 468.6,323.5 C 481.0,306.4 497.2,298.3 513.4,294.0 C 529.5,289.6 545.9,288.6 561.9,283.5 C 607.5,268.9 646.2,222.8 684.5,181.0 C 715.9,146.8 749.2,114.0 786.5,102.7 C 834.0,88.3 882.5,110.1 930.1,123.4", "name": "Road 86"}, {"d": "M 783.4,211.8 C 762.5,243.9 742.8,278.0 725.6,315.2", "name": "[#] Road 77"}, {"d": "M 60.6,827.6 C 78.3,824.1 96.1,820.8 113.8,816.5 C 211.6,792.6 305.2,736.5 395.0,670.4", "name": "Road 38"}, {"d": "M 511.1,609.6 C 490.6,620.9 469.8,630.7 449.2,641.4", "name": "[#] Road 28"}, {"d": "M 448.8,639.5 C 466.4,626.1 484.9,615.1 500.9,597.2 C 512.8,583.8 523.0,566.9 533.6,550.9 C 545.9,532.4 558.9,514.9 571.7,497.2 C 585.9,477.5 600.0,457.4 614.1,437.3 C 626.7,419.4 639.3,401.6 651.9,383.8 C 694.4,323.9 736.9,263.9 782.5,210.4", "name": "[Y]_[FM]_[A-03-L]"}, {"d": "M 433.8,649.5 C 426.0,653.5 418.1,657.5 410.3,661.4", "name": "[#] Road 27"}, {"d": "M 526.5,601.2 C 540.1,593.6 553.5,584.9 566.0,573.6 C 579.4,561.4 591.6,546.4 603.5,530.7 C 624.5,503.1 644.3,473.5 664.5,444.4 C 672.2,433.2 680.1,422.1 686.6,409.1 C 698.1,386.6 705.3,359.5 716.0,336.1", "name": "[Y]_[FM]_[A-01-L]"}, {"d": "M 526.1,599.3 C 545.5,583.6 561.9,559.9 578.3,536.8 C 588.2,522.8 598.1,508.8 608.1,494.8 C 615.8,484.0 623.4,473.1 631.1,462.3 C 635.5,455.9 640.0,449.6 644.4,443.3 C 653.5,430.5 662.7,417.9 671.5,404.8 C 686.6,382.5 700.7,358.6 715.0,335.0", "name": "[Y]_[FM]_[A-02-S]"}, {"d": "M 795.1,193.9 C 814.6,164.1 838.3,140.4 864.4,129.4", "name": "[#] Road 21"}, {"d": "M 880.4,124.3 C 896.9,121.2 913.5,124.3 930.0,125.4", "name": "Road 20"}, {"d": "M 946.3,126.5 C 962.8,127.6 979.2,129.9 995.6,132.7 C 1031.5,139.0 1067.2,148.2 1103.1,154.0 C 1107.7,154.7 1112.3,155.4 1116.9,156.1 C 1180.7,165.8 1244.4,178.5 1308.4,183.9 C 1318.7,184.8 1329.1,185.5 1339.4,186.9", "name": "Road 15b"}, {"d": "M 748.9,212.4 C 749.4,211.7 749.9,210.9 750.4,210.2 C 782.1,165.5 822.2,135.8 864.2,127.5", "name": "[#] Road 21"}, {"d": "M 483.5,588.3 C 483.0,589.0 482.5,589.8 482.0,590.5 C 460.9,620.2 435.4,640.7 409.8,659.6", "name": "[#] Road 27"}], "throughPaths": [{"id": "sw-151-through", "d": "M 514.3,533.6 C 515.6,531.2 523.6,516.5 524.9,514.0"}, {"id": "sw-152-through", "d": "M 695.0,277.7 C 693.3,279.5 683.2,290.4 681.5,292.2"}, {"id": "sw-153-through", "d": "M 499.3,561.4 C 500.6,559.0 508.6,544.3 509.9,541.8"}, {"id": "sw-154-through", "d": "M 714.1,257.1 C 712.4,258.9 702.3,269.8 700.6,271.6"}, {"id": "sw-155-through", "d": "M 483.5,588.3 C 485.0,586.2 494.1,573.2 495.7,571.1"}, {"id": "sw-156-through", "d": "M 732.7,235.3 C 731.1,237.5 722.0,250.4 720.5,252.6"}, {"id": "sw-157-through", "d": "M 537.4,523.0 C 539.1,521.2 549.2,510.3 550.9,508.5"}, {"id": "sw-158-through", "d": "M 718.1,267.1 C 716.7,269.5 708.8,284.2 707.5,286.7"}, {"id": "sw-159-through", "d": "M 518.3,543.6 C 520.0,541.8 530.1,530.9 531.8,529.1"}, {"id": "sw-160-through", "d": "M 733.1,239.2 C 731.8,241.7 723.8,256.4 722.5,258.9"}, {"id": "sw-161-through", "d": "M 499.7,565.4 C 501.2,563.2 510.3,550.3 511.9,548.1"}, {"id": "sw-162-through", "d": "M 748.9,212.4 C 747.3,214.5 738.2,227.4 736.7,229.6"}, {"id": "sw-398-through", "d": "M 511.1,609.6 C 513.0,608.6 524.6,602.2 526.5,601.2"}, {"id": "sw-399-through", "d": "M 433.8,649.5 C 435.7,648.5 447.3,642.4 449.2,641.4"}, {"id": "sw-400-through", "d": "M 395.0,670.4 C 396.9,669.1 407.9,660.9 409.8,659.6"}, {"id": "sw-401-through", "d": "M 725.6,315.2 C 724.4,317.9 717.2,333.5 716.0,336.1"}, {"id": "sw-402-through", "d": "M 795.1,193.9 C 793.7,196.1 784.9,209.6 783.4,211.8"}, {"id": "sw-403-through", "d": "M 880.4,124.3 C 878.4,124.7 866.3,127.1 864.2,127.5"}], "divergePaths": [{"id": "sw-151-diverge", "d": "M 514.3,533.6 C 517.0,528.7 520.3,523.1 525.9,515.3"}, {"id": "sw-152-diverge", "d": "M 695.0,277.7 C 691.6,281.3 687.7,286.0 682.2,293.8"}, {"id": "sw-153-diverge", "d": "M 499.3,561.4 C 501.9,556.5 505.3,550.9 510.8,543.1"}, {"id": "sw-154-diverge", "d": "M 714.1,257.1 C 710.7,260.7 706.8,265.4 701.3,273.3"}, {"id": "sw-155-diverge", "d": "M 483.5,588.3 C 486.5,584.0 490.0,578.5 494.8,569.6"}, {"id": "sw-156-diverge", "d": "M 732.7,235.3 C 729.6,239.6 725.8,244.5 719.7,251.1"}, {"id": "sw-157-diverge", "d": "M 537.4,523.0 C 540.8,519.4 544.7,514.7 550.2,506.9"}, {"id": "sw-158-diverge", "d": "M 718.1,267.1 C 715.4,272.0 712.0,277.6 706.5,285.4"}, {"id": "sw-159-diverge", "d": "M 518.3,543.6 C 521.7,539.9 525.6,535.2 531.1,527.4"}, {"id": "sw-160-diverge", "d": "M 733.1,239.2 C 730.5,244.2 727.1,249.8 721.6,257.6"}, {"id": "sw-161-diverge", "d": "M 499.7,565.4 C 502.8,561.1 506.6,556.2 512.7,549.6"}, {"id": "sw-162-diverge", "d": "M 748.9,212.4 C 745.8,216.7 742.4,222.2 737.5,231.1"}, {"id": "sw-398-diverge", "d": "M 511.1,609.6 C 514.9,607.5 519.5,604.6 526.1,599.3"}, {"id": "sw-399-diverge", "d": "M 433.8,649.5 C 437.6,647.5 442.2,644.6 448.8,639.5"}, {"id": "sw-400-diverge", "d": "M 395.0,670.4 C 398.7,667.7 403.2,664.8 410.3,661.4"}, {"id": "sw-401-diverge", "d": "M 725.6,315.2 C 723.2,320.5 720.1,326.5 715.0,335.0"}, {"id": "sw-402-diverge", "d": "M 795.1,193.9 C 792.2,198.4 788.5,203.4 782.5,210.4"}, {"id": "sw-403-diverge", "d": "M 880.4,124.3 C 876.4,125.1 871.5,126.5 864.4,129.4"}], "turnouts": [{"id": 151, "x": 514.3, "y": 533.6, "tDeg": -49.3, "dDeg": -44.9, "tPathId": "sw-151-through", "dPathId": "sw-151-diverge"}, {"id": 152, "x": 695.0, "y": 277.7, "tDeg": 145.9, "dDeg": 141.6, "tPathId": "sw-152-through", "dPathId": "sw-152-diverge"}, {"id": 153, "x": 499.3, "y": 561.4, "tDeg": -49.3, "dDeg": -44.9, "tPathId": "sw-153-through", "dPathId": "sw-153-diverge"}, {"id": 154, "x": 714.1, "y": 257.1, "tDeg": 145.9, "dDeg": 141.6, "tPathId": "sw-154-through", "dPathId": "sw-154-diverge"}, {"id": 155, "x": 483.5, "y": 588.3, "tDeg": -41.7, "dDeg": -46.0, "tPathId": "sw-155-through", "dPathId": "sw-155-diverge"}, {"id": 156, "x": 732.7, "y": 235.3, "tDeg": 138.3, "dDeg": 142.7, "tPathId": "sw-156-through", "dPathId": "sw-156-diverge"}, {"id": 157, "x": 537.4, "y": 523.0, "tDeg": -34.1, "dDeg": -38.4, "tPathId": "sw-157-through", "dPathId": "sw-157-diverge"}, {"id": 158, "x": 718.1, "y": 267.1, "tDeg": 130.7, "dDeg": 135.1, "tPathId": "sw-158-through", "dPathId": "sw-158-diverge"}, {"id": 159, "x": 518.3, "y": 543.6, "tDeg": -34.1, "dDeg": -38.4, "tPathId": "sw-159-through", "dPathId": "sw-159-diverge"}, {"id": 160, "x": 733.1, "y": 239.2, "tDeg": 130.7, "dDeg": 135.1, "tPathId": "sw-160-through", "dPathId": "sw-160-diverge"}, {"id": 161, "x": 499.7, "y": 565.4, "tDeg": -41.7, "dDeg": -37.3, "tPathId": "sw-161-through", "dPathId": "sw-161-diverge"}, {"id": 162, "x": 748.9, "y": 212.4, "tDeg": 138.3, "dDeg": 134.0, "tPathId": "sw-162-through", "dPathId": "sw-162-diverge"}, {"id": 398, "x": 511.1, "y": 609.6, "tDeg": -19.1, "dDeg": -23.5, "tPathId": "sw-398-through", "dPathId": "sw-398-diverge"}, {"id": 399, "x": 433.8, "y": 649.5, "tDeg": -18.1, "dDeg": -22.5, "tPathId": "sw-399-through", "dPathId": "sw-399-diverge"}, {"id": 400, "x": 395.0, "y": 670.4, "tDeg": -24.8, "dDeg": -20.5, "tPathId": "sw-400-through", "dPathId": "sw-400-diverge"}, {"id": 401, "x": 725.6, "y": 315.2, "tDeg": 126.2, "dDeg": 130.6, "tPathId": "sw-401-through", "dPathId": "sw-401-diverge"}, {"id": 402, "x": 795.1, "y": 193.9, "tDeg": 136.1, "dDeg": 140.4, "tPathId": "sw-402-through", "dPathId": "sw-402-diverge"}, {"id": 403, "x": 880.4, "y": 124.3, "tDeg": 173.0, "dDeg": 168.6, "tPathId": "sw-403-through", "dPathId": "sw-403-diverge"}], "w": 1400, "h": 900};
+const svg = document.getElementById('map');
+svg.setAttribute('viewBox', `0 0 ${FM.w} ${FM.h}`);
 
-// Switch point position
-const PX = 335, PY = 200;
+const ACTIVE = '#a0a0a0';
+const INACTIVE = '#2a2a2a';
+const TRACK_BG = '#666';     // background tracks (non-switch)
+const TRACK_BG_W = 2;
+const SWITCH_W = 2;          // switch segment stroke width
+const TRI_TIP = 6;           // triangle tip distance from anchor
+const TRI_HW = 3.5;          // triangle half-width at base
+const ease = t => 1 - Math.pow(1-t, 3);
+const actEl = document.getElementById('act');
+const debugEl = document.getElementById('debug');
+const debugContent = document.getElementById('debugContent');
 
-// Route angles (in SVG coordinate space)
-// Through: straight right = 0°
-// Diverging: up-right = angle toward (600, 80) from (335, 200)
-const throughAngle = 0;
-const divergeAngle = Math.atan2(80 - 200, 600 - 335) * 180 / Math.PI; // ≈ -24.6°
+// ================================================================
+// LAYER 1: Background tracks (non-switch segments)
+// These never change visual state — they are the static railway
+// ================================================================
 
-let state = 0; // 0 = through, 1 = diverge
-let animating = false;
-
-const ease = t => 1 - Math.pow(1 - t, 3);
-
-function setVisualState(throughActive) {
-  // Active route = bright, inactive = dim
-  if (throughActive) {
-    throughLine.setAttribute('stroke', '#b0b0b0');
-    divergeLine.setAttribute('stroke', '#333');
-    lblThrough.setAttribute('fill', '#777');
-    lblDiverge.setAttribute('fill', '#333');
-    stateLabel.innerHTML = 'State: <b>THROUGH</b>';
-  } else {
-    throughLine.setAttribute('stroke', '#333');
-    divergeLine.setAttribute('stroke', '#b0b0b0');
-    lblThrough.setAttribute('fill', '#333');
-    lblDiverge.setAttribute('fill', '#777');
-    stateLabel.innerHTML = 'State: <b>DIVERGE</b>';
-  }
-}
-
-indicator.addEventListener('click', () => {
-  if (animating) return;
-  animating = true;
-
-  const newState = 1 - state;
-  const fromAngle = state === 0 ? throughAngle : divergeAngle;
-  const toAngle = newState === 0 ? throughAngle : divergeAngle;
-  state = newState;
-
-  // Update track brightness at the start of the animation
-  setVisualState(state === 0);
-
-  const t0 = performance.now();
-
-  function frame(now) {
-    const raw = Math.min((now - t0) / 300, 1);
-    const e = ease(raw);
-    const angle = fromAngle + (toAngle - fromAngle) * e;
-    indicator.setAttribute('transform', `rotate(${angle}, ${PX}, ${PY})`);
-
-    if (raw < 1) {
-      requestAnimationFrame(frame);
-    } else {
-      indicator.setAttribute('transform', `rotate(${toAngle}, ${PX}, ${PY})`);
-      animating = false;
-    }
-  }
-  requestAnimationFrame(frame);
+FM.tracks.forEach(t => {
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  p.setAttribute('d', t.d);
+  p.setAttribute('stroke', TRACK_BG);
+  p.setAttribute('stroke-width', TRACK_BG_W);
+  p.setAttribute('fill', 'none');
+  p.setAttribute('stroke-linecap', 'round');
+  p.setAttribute('stroke-linejoin', 'round');
+  svg.appendChild(p);
 });
 
-// Hover feedback
-const tri = document.getElementById('tri');
-indicator.addEventListener('mouseenter', () => tri.setAttribute('fill', '#eee'));
-indicator.addEventListener('mouseleave', () => tri.setAttribute('fill', '#c8c8c8'));
+// ================================================================
+// LAYER 2: Switch segments (through + diverge paths)
+// Each has an ID so we can change its color when the switch toggles
+// ================================================================
+
+const switchPathEls = {};
+
+FM.throughPaths.forEach(t => {
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  p.setAttribute('d', t.d);
+  p.setAttribute('id', t.id);
+  p.setAttribute('stroke', ACTIVE);  // through starts active
+  p.setAttribute('stroke-width', SWITCH_W);
+  p.setAttribute('fill', 'none');
+  p.setAttribute('stroke-linecap', 'round');
+  p.setAttribute('stroke-linejoin', 'round');
+  p.style.transition = 'stroke 200ms ease';
+  svg.appendChild(p);
+  switchPathEls[t.id] = p;
+});
+
+FM.divergePaths.forEach(t => {
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  p.setAttribute('d', t.d);
+  p.setAttribute('id', t.id);
+  p.setAttribute('stroke', INACTIVE);  // diverge starts inactive
+  p.setAttribute('stroke-width', SWITCH_W);
+  p.setAttribute('fill', 'none');
+  p.setAttribute('stroke-linecap', 'round');
+  p.setAttribute('stroke-linejoin', 'round');
+  p.style.transition = 'stroke 200ms ease';
+  svg.appendChild(p);
+  switchPathEls[t.id] = p;
+});
+
+// ================================================================
+// LAYER 3: Turnout indicators
+// One small triangle per physical turnout, anchored at the switch point
+// ================================================================
+
+const turnoutState = {};
+
+FM.turnouts.forEach(sw => {
+  turnoutState[sw.id] = { state: 0, animating: false };
+
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.setAttribute('transform', `rotate(${sw.tDeg}, ${sw.x}, ${sw.y})`);
+  g.style.cursor = 'pointer';
+
+  // Small triangle: tip points along selected route
+  const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+  poly.setAttribute('points',
+    `${sw.x+TRI_TIP},${sw.y} ${sw.x-TRI_TIP*0.15},${sw.y-TRI_HW} ${sw.x-TRI_TIP*0.15},${sw.y+TRI_HW}`);
+  poly.setAttribute('fill', '#c0c0c0');
+  poly.style.transition = 'fill 120ms';
+  g.appendChild(poly);
+
+  // Hover
+  g.addEventListener('mouseenter', () => {
+    poly.setAttribute('fill', '#eee');
+    showDebug(sw);
+  });
+  g.addEventListener('mouseleave', () => {
+    poly.setAttribute('fill', '#c0c0c0');
+  });
+
+  // Click: toggle switch state
+  g.addEventListener('click', () => {
+    const ts = turnoutState[sw.id];
+    if (ts.animating) return;
+    ts.animating = true;
+
+    const oldState = ts.state;
+    const newState = 1 - oldState;
+    ts.state = newState;
+
+    const fromAngle = oldState === 0 ? sw.tDeg : sw.dDeg;
+    const toAngle = newState === 0 ? sw.tDeg : sw.dDeg;
+
+    // Update track segment colors
+    const tEl = switchPathEls[sw.tPathId];
+    const dEl = switchPathEls[sw.dPathId];
+    if (tEl) tEl.setAttribute('stroke', newState === 0 ? ACTIVE : INACTIVE);
+    if (dEl) dEl.setAttribute('stroke', newState === 1 ? ACTIVE : INACTIVE);
+
+    actEl.textContent = `J-${sw.id} → ${newState === 0 ? 'THROUGH' : 'DIVERGE'}`;
+    showDebug(sw);
+
+    // Animate indicator rotation
+    const t0 = performance.now();
+    (function frame(now) {
+      const r = Math.min((now - t0) / 300, 1);
+      const a = fromAngle + (toAngle - fromAngle) * ease(r);
+      g.setAttribute('transform', `rotate(${a}, ${sw.x}, ${sw.y})`);
+      if (r < 1) requestAnimationFrame(frame);
+      else {
+        g.setAttribute('transform', `rotate(${toAngle}, ${sw.x}, ${sw.y})`);
+        ts.animating = false;
+      }
+    })(performance.now());
+  });
+
+  svg.appendChild(g);
+});
+
+// ================================================================
+// DEBUG PANEL
+// ================================================================
+
+let debugVisible = false;
+document.addEventListener('keydown', e => {
+  if (e.key === 'd' || e.key === 'D') {
+    debugVisible = !debugVisible;
+    debugEl.style.display = debugVisible ? 'block' : 'none';
+  }
+});
+
+function showDebug(sw) {
+  if (!debugVisible) return;
+  const ts = turnoutState[sw.id];
+  debugContent.innerHTML = `
+    <div class="row">Turnout ID: <b>J-${sw.id}</b></div>
+    <div class="row">Anchor: <b>(${sw.x.toFixed(0)}, ${sw.y.toFixed(0)})</b> SVG coords</div>
+    <div class="row">Through angle: <b>${sw.tDeg.toFixed(1)}°</b></div>
+    <div class="row">Diverge angle: <b>${sw.dDeg.toFixed(1)}°</b></div>
+    <div class="row">Split angle: <b>${Math.abs(sw.dDeg - sw.tDeg).toFixed(1)}°</b></div>
+    <div class="row">State: <b>${ts.state === 0 ? 'THROUGH' : 'DIVERGE'}</b></div>
+    <div class="row">Through path: <b>${sw.tPathId}</b></div>
+    <div class="row">Diverge path: <b>${sw.dPathId}</b></div>
+  `;
+}
+
+// ================================================================
+// PAN & ZOOM
+// ================================================================
+
+let vb = {x: 0, y: 0, w: FM.w, h: FM.h};
+let pan = false, ps = {x:0, y:0};
+function setVB() { svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); }
+
+svg.addEventListener('mousedown', e => {
+  if (e.target.closest('g')) return;
+  pan = true; ps = {x: e.clientX, y: e.clientY};
+});
+window.addEventListener('mousemove', e => {
+  if (!pan) return;
+  const r = svg.getBoundingClientRect();
+  vb.x -= (e.clientX - ps.x) * vb.w / r.width;
+  vb.y -= (e.clientY - ps.y) * vb.h / r.height;
+  ps = {x: e.clientX, y: e.clientY};
+  setVB();
+});
+window.addEventListener('mouseup', () => pan = false);
+svg.addEventListener('wheel', e => {
+  e.preventDefault();
+  const f = e.deltaY > 0 ? 1.1 : 0.9;
+  const r = svg.getBoundingClientRect();
+  const mx = (e.clientX - r.left) / r.width;
+  const my = (e.clientY - r.top) / r.height;
+  const nw = vb.w * f, nh = vb.h * f;
+  vb.x += (vb.w - nw) * mx;
+  vb.y += (vb.h - nh) * my;
+  vb.w = nw; vb.h = nh;
+  setVB();
+}, {passive: false});
 </script>
 </body>
 </html>
